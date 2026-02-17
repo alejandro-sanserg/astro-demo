@@ -9,6 +9,7 @@
  */
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getLessonsByChapter, getLessonSlug, CHAPTERS } from '../../utils/lessons';
+import { url } from '../../utils/paths';
 
 const lessonsByChapter = await getLessonsByChapter();
 ---
@@ -32,7 +33,7 @@ const lessonsByChapter = await getLessonsByChapter();
         </div>
         <div class="lesson-grid">
           {lessons.map((lesson) => (
-            <a href={`/lessons/${getLessonSlug(lesson)}/`} class="lesson-card">
+            <a href={url(`/lessons/${getLessonSlug(lesson)}/`)} class="lesson-card">
               <div class="lesson-card-header">
                 <span class="lesson-number">{chapterNum}.{lesson.data.order}</span>
                 <span class:list={['difficulty-dot', lesson.data.difficulty]} />

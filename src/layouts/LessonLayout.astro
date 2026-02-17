@@ -18,6 +18,7 @@ import BaseLayout from './BaseLayout.astro';
 import Sidebar from '../components/Sidebar.astro';
 import LessonNav from '../components/LessonNav.astro';
 import TableOfContents from '../components/TableOfContents.astro';
+import { url } from '../utils/paths';
 
 interface Props {
   title: string;
@@ -67,9 +68,9 @@ const chapterNames: Record<number, string> = {
     <article class="lesson-content">
       <!-- Breadcrumb navigation -->
       <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Home</a>
+        <a href={url('/')}>Home</a>
         <span class="separator">/</span>
-        <a href="/lessons">Lessons</a>
+        <a href={url('/lessons')}>Lessons</a>
         <span class="separator">/</span>
         <span>Chapter {chapter}: {chapterNames[chapter]}</span>
       </nav>

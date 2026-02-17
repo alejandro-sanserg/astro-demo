@@ -12,6 +12,8 @@
  *
  * @see Lesson 1.4 (Layouts & Composition) for how this fits into the layout system.
  */
+import { url } from '../utils/paths';
+
 interface Props {
   title: string;
   description: string;
@@ -26,7 +28,7 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 <!-- Global Metadata -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="icon" type="image/svg+xml" href={url('/favicon.svg')} />
 <meta name="generator" content={Astro.generator} />
 
 <!-- Fonts — loaded from Google Fonts for simplicity -->

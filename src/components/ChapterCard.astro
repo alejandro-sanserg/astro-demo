@@ -7,6 +7,8 @@
  *
  * @see Lesson 1.3 (Astro Components) for how props and slots work.
  */
+import { url } from '../utils/paths';
+
 interface Props {
   number: number;
   title: string;
@@ -26,7 +28,7 @@ const difficultyLabels: Record<number, string> = {
 };
 ---
 
-<a href={`/lessons/${firstLessonSlug}/`} class="chapter-card">
+<a href={url(`/lessons/${firstLessonSlug}/`)} class="chapter-card">
   <div class="chapter-number">Chapter {number}</div>
   <h3 class="chapter-title">{title}</h3>
   <p class="chapter-description">{description}</p>

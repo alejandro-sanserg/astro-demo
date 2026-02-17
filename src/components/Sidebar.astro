@@ -15,6 +15,7 @@
  * @see Lesson 3.2 (Querying Content) for getCollection usage.
  */
 import { getLessonsByChapter, getLessonSlug, CHAPTERS } from '../utils/lessons';
+import { url } from '../utils/paths';
 
 const lessonsByChapter = await getLessonsByChapter();
 const currentPath = Astro.url.pathname;
@@ -34,8 +35,8 @@ const currentPath = Astro.url.pathname;
       <ul class="lesson-list">
         {lessons.map((lesson) => {
           const slug = getLessonSlug(lesson);
-          const lessonPath = `/lessons/${slug}/`;
-          const isActive = currentPath === lessonPath || currentPath === `/lessons/${slug}`;
+          const lessonPath = url(`/lessons/${slug}/`);
+          const isActive = currentPath === lessonPath || currentPath === url(`/lessons/${slug}`);
           return (
             <li>
               {/*
