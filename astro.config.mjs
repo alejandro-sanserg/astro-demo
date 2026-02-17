@@ -17,8 +17,9 @@ import react from '@astrojs/react';
  * @see Lesson 3.3 (MDX) and Lesson 4.2 (React Integration) for how these integrations are used.
  */
 export default defineConfig({
-  // The site URL — update this when deploying to production.
-  site: 'https://astro-for-react-devs.example.com',
+  // The site URL for GitHub Pages. Replace 'alejandro-sanserg' with your GitHub username.
+  site: 'https://alejandro-sanserg.github.io',
+  base: '/astro-demo',
 
   // Integrations extend Astro's capabilities.
   // Order matters: mdx() must come before framework integrations in some setups.
