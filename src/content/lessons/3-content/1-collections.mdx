@@ -1,0 +1,261 @@
+---
+title: Content Collections
+description: Learn how Astro's content collections bring type-safe, schema-validated content to your project — replacing fragile runtime checks with build-time guarantees powered by Zod.
+chapter: 3
+order: 1
+difficulty: intermediate
+objectives:
+  - Understand what content collections are and the problems they solve
+  - Configure collections in content.config.ts with defineCollection()
+  - Write Zod schemas to validate frontmatter at build time
+  - Use the glob() loader to tell Astro where your content lives
+  - Recognize how this replaces runtime validation patterns from React
+duration: '12 min'
+tags: ['content-collections', 'zod', 'schema', 'type-safety', 'frontmatter']
+---
+
+import Callout from '../../../components/Callout.astro';
+
+# Content Collections
+
+If you've ever built a blog or documentation site in React, you know the drill: fetch Markdown files from disk or a CMS, parse the frontmatter yourself, hope the data shape is correct, and deal with mysterious runtime errors when someone forgets a required field. Astro's **content collections** eliminate that entire class of problems.
+
+A content collection is a group of related content files — like blog posts, docs pages, or (in this project) course lessons — that share a **validated schema**. Astro checks every file's frontmatter against that schema at build time. If a field is missing, has the wrong type, or fails a validation rule, you get a clear error *before* your site ever deploys.
+
+## The Problem Collections Solve
+
+Consider a typical React project with Markdown blog posts. You might have files scattered in a `/posts` directory with frontmatter like this:
+
+```markdown
+---
+title: My First Post
+date: 2024-01-15
+author: Jane
+tags: [react, tutorial]
+---
+```
+
+In React, you'd write code to:
+1. Read files from disk (with `fs.readFileSync` or a bundler plugin)
+2. Parse the frontmatter (with `gray-matter` or similar)
+3. Hope that every file has a `title`, a valid `date`, and that `tags` is always an array
+4. Maybe add PropTypes or runtime checks — which only catch errors when someone visits the page
+
+That's a lot of moving parts, and errors slip through easily. A missing `date` field won't crash your build — it'll crash your page at 2 AM on a Saturday.
+
+<Callout type="tip" title="Coming from React?">
+  In React, you'd typically validate content data with PropTypes, runtime `if` checks, or a library like Yup/Zod in your API layer. Astro moves this validation to **build time** using Zod schemas. If your content doesn't match the schema, `astro build` fails immediately with a clear error message — not your production site.
+</Callout>
+
+## The content.config.ts File
+
+In Astro v5, collection configuration lives in a single file at the **project root** called `content.config.ts`. This is where you define every collection in your project, including what loader to use and what schema to enforce.
+
+Here's the actual configuration file from this project:
+
+```typescript
+// content.config.ts (project root — NOT inside src/)
+import { defineCollection, z } from 'astro:content';
+import { glob } from 'astro/loaders';
+
+const lessons = defineCollection({
+  loader: glob({ pattern: '**/*.mdx', base: './src/content/lessons' }),
+  schema: z.object({
+    title: z.string(),
+    description: z.string(),
+    chapter: z.number().int().min(1).max(5),
+    order: z.number().int().min(1),
+    difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
+    objectives: z.array(z.string()),
+    duration: z.string(),
+    tags: z.array(z.string()).default([]),
+  }),
+});
+
+export const collections = { lessons };
+```
+
+Let's break this down piece by piece.
+
+## defineCollection() — Declaring a Collection
+
+The `defineCollection()` function takes an object with two key properties:
+
+- **`loader`**: tells Astro *where* and *how* to find content files
+- **`schema`**: tells Astro *what shape* the frontmatter must have
+
+```typescript
+const lessons = defineCollection({
+  loader: /* how to find files */,
+  schema: /* what the frontmatter looks like */,
+});
+```
+
+You then export all your collections in a `collections` object:
+
+```typescript
+export const collections = { lessons };
+```
+
+The key name (`lessons`) becomes the collection's identifier. When you later query content with `getCollection('lessons')`, Astro knows exactly which files and schema you mean.
+
+You can define multiple collections in the same file:
+
+```typescript
+const lessons = defineCollection({ /* ... */ });
+const blogPosts = defineCollection({ /* ... */ });
+const authors = defineCollection({ /* ... */ });
+
+export const collections = { lessons, blogPosts, authors };
+```
+
+## The glob() Loader
+
+The `glob()` loader is the most common way to tell Astro where your content files live on disk. It takes two parameters:
+
+```typescript
+loader: glob({
+  pattern: '**/*.mdx',           // Which files to match
+  base: './src/content/lessons',  // Where to start looking
+})
+```
+
+- **`pattern`** — a glob pattern that determines which files are included. `**/*.mdx` means "all `.mdx` files in any subdirectory."
+- **`base`** — the root directory to search from, relative to the project root.
+
+The glob loader recursively walks the directory tree, matching files against the pattern. In this project, our lesson files are organized like this:
+
+```
+src/content/lessons/
+├── 1-foundations/
+│   ├── 1-welcome.mdx
+│   ├── 2-project-structure.mdx
+│   └── 3-astro-components.mdx
+├── 2-styling/
+│   └── ...
+├── 3-content/          ← you are here
+│   ├── 1-collections.mdx
+│   ├── 2-querying.mdx
+│   └── 3-mdx.mdx
+└── ...
+```
+
+Each file's **ID** is derived from its path relative to the `base` directory. So `src/content/lessons/3-content/1-collections.mdx` gets the ID `3-content/1-collections`. This ID is what you'll use to generate URLs and query individual entries.
+
+<Callout type="info" title="Loaders beyond glob()">
+  The `glob()` loader handles local files, but Astro's loader API is extensible. You can use loaders for external sources — a headless CMS, a database, or a custom API. The community has built loaders for Notion, Sanity, Contentful, and more. The schema validation works the same regardless of where the data comes from.
+</Callout>
+
+## Zod Schemas — Your Content Contract
+
+The `schema` property uses [Zod](https://zod.dev), a TypeScript-first validation library that Astro ships with. You don't need to install it separately — just import `z` from `astro:content`.
+
+Here's our lesson schema annotated with what each line does:
+
+```typescript
+schema: z.object({
+  // Required string — must be present and non-empty
+  title: z.string(),
+  description: z.string(),
+
+  // Integer between 1 and 5 — catches typos like chapter: 6 or chapter: 1.5
+  chapter: z.number().int().min(1).max(5),
+
+  // Positive integer — lesson order within a chapter
+  order: z.number().int().min(1),
+
+  // Must be exactly one of these three values
+  difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
+
+  // Array of strings — learning objectives shown at the top of each lesson
+  objectives: z.array(z.string()),
+
+  // Freeform string like "12 min" — human-readable duration
+  duration: z.string(),
+
+  // Array of strings with a default value — optional in frontmatter
+  tags: z.array(z.string()).default([]),
+})
+```
+
+### What happens when validation fails?
+
+If you create a lesson file with invalid frontmatter, Astro gives you a clear, actionable error at build time:
+
+```
+[ERROR] Invalid frontmatter in "3-content/1-collections.mdx"
+  → "chapter" must be a number, received string
+```
+
+Compare that to a React app where a missing field silently renders `undefined` until a user reports a broken page. Build-time validation is a fundamentally better developer experience.
+
+### Common Zod patterns for content
+
+Zod is powerful and expressive. Here are patterns you'll use frequently:
+
+```typescript
+z.object({
+  // Optional fields (won't error if missing)
+  subtitle: z.string().optional(),
+
+  // Default values (field is optional in frontmatter but always present in code)
+  draft: z.boolean().default(false),
+
+  // Dates (Astro parses YAML dates automatically)
+  publishedAt: z.date(),
+
+  // Union types
+  status: z.enum(['draft', 'review', 'published']),
+
+  // Nested objects
+  author: z.object({
+    name: z.string(),
+    avatar: z.string().url(),
+  }),
+
+  // Constrained numbers
+  rating: z.number().min(1).max(5),
+})
+```
+
+<Callout type="warning" title="Schema changes require a dev server restart">
+  When you modify `content.config.ts`, you need to restart the Astro dev server for the changes to take effect. Astro caches the collection configuration, so changes to the schema won't be picked up until you restart with `astro dev`.
+</Callout>
+
+## Type Safety All the Way Through
+
+One of the biggest wins of content collections is that the Zod schema generates TypeScript types automatically. When you query a lesson with `getCollection('lessons')`, every entry is fully typed:
+
+```typescript
+const lessons = await getCollection('lessons');
+
+lessons[0].data.title;       // string — TypeScript knows this
+lessons[0].data.chapter;     // number
+lessons[0].data.difficulty;  // 'beginner' | 'intermediate' | 'advanced'
+lessons[0].data.objectives;  // string[]
+lessons[0].data.tags;        // string[] (always present thanks to .default([]))
+```
+
+Your editor gives you autocomplete for every frontmatter field. Typos like `lesson.data.titl` get caught instantly. This is the same kind of safety you'd get from a typed API response in React, but without writing any type definitions manually — Zod infers them.
+
+## How This Compares to Other Frameworks
+
+| Feature | React (manual) | Next.js | Astro |
+|---------|---------------|---------|-------|
+| Content loading | `fs.readFileSync` + `gray-matter` | `getStaticProps` + manual parsing | `glob()` loader — declarative |
+| Schema validation | Runtime (PropTypes, Yup, Zod) | Runtime | **Build time** (Zod) |
+| TypeScript types | Write manually or use codegen | Write manually | **Auto-inferred** from schema |
+| Error timing | Page visit | Page visit or build | **Build** |
+| Configuration | Scattered across utils | Scattered across pages | **Single file** (`content.config.ts`) |
+
+## Summary
+
+Content collections give you a **single source of truth** for your content's structure. The `content.config.ts` file at the project root declares:
+
+1. **Where** content lives — via the `glob()` loader
+2. **What shape** it must have — via a Zod schema
+3. **What type** it produces — inferred automatically
+
+Errors are caught at build time, TypeScript types flow through your entire codebase, and you never have to worry about malformed frontmatter reaching production.
+
+In the next lesson, we'll put collections to work — querying entries, generating pages, and rendering MDX content.

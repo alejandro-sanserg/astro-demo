@@ -1,0 +1,142 @@
+---
+/**
+ * Sidebar Component
+ * ─────────────────
+ * Renders the course navigation: chapters with their lessons grouped underneath.
+ * This component queries the lessons content collection at build time and organizes
+ * them into a hierarchical navigation structure.
+ *
+ * Key Astro concepts demonstrated:
+ * - Fetching data in the frontmatter (runs at build time, not in the browser)
+ * - Using `Astro.url` to determine the active page (no useRouter hook needed)
+ * - The `class:list` directive for conditional CSS classes
+ *
+ * @see Lesson 1.3 (Astro Components) for frontmatter data fetching.
+ * @see Lesson 3.2 (Querying Content) for getCollection usage.
+ */
+import { getLessonsByChapter, getLessonSlug, CHAPTERS } from '../utils/lessons';
+
+const lessonsByChapter = await getLessonsByChapter();
+const currentPath = Astro.url.pathname;
+---
+
+<nav class="sidebar" aria-label="Course navigation">
+  <div class="sidebar-header">
+    <span class="sidebar-title">Course Outline</span>
+  </div>
+
+  {[...lessonsByChapter.entries()].map(([chapterNum, lessons]) => (
+    <section class="chapter-group">
+      <h3 class="chapter-heading">
+        <span class="chapter-number">Ch. {chapterNum}</span>
+        {CHAPTERS[chapterNum]?.title}
+      </h3>
+      <ul class="lesson-list">
+        {lessons.map((lesson) => {
+          const slug = getLessonSlug(lesson);
+          const lessonPath = `/lessons/${slug}/`;
+          const isActive = currentPath === lessonPath || currentPath === `/lessons/${slug}`;
+          return (
+            <li>
+              {/*
+                class:list is Astro's way of conditionally applying CSS classes.
+                It's similar to the popular `clsx` or `classnames` libraries in React,
+                but built into Astro's template syntax.
+                @see Lesson 2.1 (Scoped Styles) for more on class:list.
+              */}
+              <a
+                href={lessonPath}
+                class:list={['lesson-link', { active: isActive }]}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                <span class="lesson-number">{chapterNum}.{lesson.data.order}</span>
+                <span class="lesson-title">{lesson.data.title}</span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  ))}
+</nav>
+
+<style>
+  .sidebar {
+    padding: 0;
+  }
+
+  .sidebar-header {
+    padding: var(--space-4) var(--space-4) var(--space-2);
+  }
+
+  .sidebar-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+  }
+
+  .chapter-group {
+    margin-bottom: var(--space-2);
+  }
+
+  .chapter-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  .chapter-number {
+    color: var(--color-accent-light);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .lesson-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .lesson-link {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4) var(--space-2) var(--space-6);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    border-left: 2px solid transparent;
+  }
+
+  .lesson-link:hover {
+    background: var(--color-surface);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .lesson-link.active {
+    background: var(--color-accent-subtle);
+    color: var(--color-accent-light);
+    border-left-color: var(--color-accent);
+    font-weight: 500;
+  }
+
+  .lesson-number {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    min-width: 1.5rem;
+    font-family: var(--font-mono);
+  }
+
+  .lesson-link.active .lesson-number {
+    color: var(--color-accent-light);
+  }
+</style>

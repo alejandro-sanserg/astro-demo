@@ -1,0 +1,266 @@
+---
+title: "Integrating React"
+description: "Learn how to use React components inside Astro projects — rendering them as static HTML by default and opting into client-side interactivity with directives."
+chapter: 4
+order: 2
+difficulty: "intermediate"
+objectives:
+  - "Set up the @astrojs/react integration in an Astro project"
+  - "Create and organize React components within Astro's project structure"
+  - "Understand what happens when a React component renders without a client directive"
+  - "Hydrate a React component with client:load to enable interactivity"
+  - "Pass props from Astro pages to React islands"
+  - "Recognize the limitations of isolated islands and strategies for shared state"
+duration: "15 min"
+tags:
+  - "react"
+  - "integration"
+  - "islands"
+  - "hydration"
+  - "components"
+  - "props"
+---
+
+import Callout from '../../../components/Callout.astro';
+import Counter from '../../../components/interactive/Counter.tsx';
+
+# Integrating React
+
+In the previous lesson you learned the theory of islands architecture. Now it is time to get your hands dirty. This lesson answers the question every React developer asks first: "How do I actually use my React components in Astro?"
+
+The answer is straightforward, but the implications are profound. Astro treats React as a **rendering engine**, not as the runtime that owns the page. Your React components are used to produce HTML at build time. They only become interactive in the browser if you explicitly tell Astro to hydrate them.
+
+Let's see exactly what that looks like.
+
+## The @astrojs/react Integration
+
+Astro supports React through its official integration package. If you started a project with the React template, this is already configured. Otherwise, adding it takes one command:
+
+```bash
+npx astro add react
+```
+
+This does three things automatically:
+
+1. Installs `@astrojs/react`, `react`, and `react-dom` as dependencies.
+2. Adds the integration to your `astro.config.mjs`:
+
+```js
+import { defineConfig } from 'astro/config';
+import react from '@astrojs/react';
+
+export default defineConfig({
+  integrations: [react()],
+});
+```
+
+3. Adds the necessary TypeScript configuration for JSX.
+
+That's it. There is no `ReactDOM.createRoot()`. There is no `<React.StrictMode>`. Astro handles mounting and rendering for you — both at build time and (when requested) at hydration time.
+
+<Callout type="tip" title="Framework Flexibility">
+  Astro is not married to React. The same integration pattern works for Vue (`@astrojs/vue`), Svelte (`@astrojs/svelte`), Solid (`@astrojs/solid-js`), Preact (`@astrojs/preact`), and Lit (`@astrojs/lit`). You can even use multiple frameworks in the same project — a React carousel next to a Svelte form next to a Vue chart. Each island is independent.
+</Callout>
+
+## Organizing React Components
+
+A good convention is to separate your interactive React components from your static Astro components:
+
+```
+src/
+  components/
+    Header.astro          # Static Astro component
+    Footer.astro          # Static Astro component
+    Sidebar.astro         # Static Astro component
+    interactive/
+      Counter.tsx         # React — might be hydrated
+      SearchBar.tsx       # React — will need interactivity
+      LikeButton.tsx      # React — will need interactivity
+      ImageCarousel.tsx   # React — will need interactivity
+```
+
+The `interactive/` subdirectory is not required by Astro — it is purely a convention that signals intent. When you see a component in that folder, you know it was written in React (or another framework) because it needs client-side interactivity. When you see an `.astro` file, you know it is static.
+
+This convention also helps with code reviews. If someone puts a React component in `interactive/` but never uses a `client:*` directive on it, that is a signal to ask: "Does this really need to be React, or could it be an Astro component?"
+
+## The Key Experiment: With and Without a Directive
+
+This is the most important demo in this entire course. Below are two instances of the exact same `Counter` React component. The first is rendered **without** a client directive. The second is rendered **with** `client:load`.
+
+Look at them. Try clicking the buttons on each one.
+
+### Static Counter (No Directive)
+
+<Counter label="Static Counter (no directive)" />
+
+Go ahead — click the + and - buttons above. Nothing happens. The counter displays, the buttons are visible, but clicking them does absolutely nothing.
+
+This is what a React component looks like when Astro renders it **without a client directive**. Astro ran your React component at build time, captured the HTML output, and embedded it in the page. The `useState`, the `onClick` handlers, the entire React runtime — none of that was sent to the browser. What you see above is inert HTML. A photograph of a counter, not a working counter.
+
+### Hydrated Counter (client:load)
+
+<Counter client:load label="Hydrated Counter (client:load)" />
+
+Now click the + and - buttons on this second counter. They work. The count updates. This is a fully interactive React component.
+
+The difference? Two words: `client:load`. That directive tells Astro: "This component needs to be interactive in the browser. Send its JavaScript and hydrate it with React."
+
+<Callout type="warning" title="This Is the Mental Shift">
+  In React, every component is interactive by default. You never think about it. In Astro, **no component is interactive by default**. You must consciously choose which components become islands. This is not a limitation — it is the entire point. The vast majority of your UI does not need JavaScript, and now you are no longer paying for it.
+</Callout>
+
+### What Happened Under the Hood
+
+For the static counter (no directive), Astro did this at build time:
+
+1. Imported the `Counter` component.
+2. Called `ReactDOMServer.renderToString(<Counter label="Static Counter" />)`.
+3. Took the resulting HTML string and embedded it directly into the page.
+4. Discarded the component. No JavaScript was emitted for it.
+
+For the hydrated counter (`client:load`), Astro did this:
+
+1. At build time, rendered the component to HTML (same as above — so the page loads fast with visible content).
+2. Generated a small script tag that imports the `Counter` component and `react`/`react-dom`.
+3. When the page loads in the browser, that script runs: React hydrates the existing HTML, attaches event listeners, and the component becomes interactive.
+
+The HTML for both counters looks identical when the page first loads. The difference is entirely about whether JavaScript follows.
+
+## Passing Props from Astro to React
+
+Astro components can pass props to React islands just like you would in any React parent-child relationship. The props are serialized at build time and made available when the component hydrates.
+
+```astro
+---
+// In an Astro page or component
+import Counter from '../components/interactive/Counter.tsx';
+
+const userName = "Sarah";
+const startingValue = 42;
+---
+
+<!-- Props are passed just like in React/JSX -->
+<Counter
+  client:load
+  label={`${userName}'s Counter`}
+  initialCount={startingValue}
+/>
+```
+
+There are a few rules about props:
+
+**Serializable values only.** Because props cross the server/client boundary, they must be serializable to JSON. Strings, numbers, booleans, arrays, and plain objects all work. Functions, class instances, `Map`, `Set`, and DOM nodes do not.
+
+```astro
+---
+// These work
+const config = { theme: 'dark', showLabels: true };
+const items = ['apple', 'banana', 'cherry'];
+
+// This does NOT work — functions are not serializable
+const handleClick = () => console.log('clicked');
+---
+
+<MyComponent client:load config={config} items={items} />
+<!-- <MyComponent client:load onClick={handleClick} /> ← Will fail! -->
+```
+
+**Props are evaluated at build time.** In a static Astro site, the values you pass as props are computed when the site is built. They are baked into the page's HTML and JavaScript. This means you cannot pass dynamic server state that changes per-request unless you are using Astro's SSR mode.
+
+<Callout type="info" title="React Devs: Think of It Like getStaticProps">
+  If you have used Next.js, the Astro frontmatter (the code between `---` fences) is similar to `getStaticProps`. It runs at build time, fetches data, computes values, and passes them to the template. The difference is that in Astro, this is just regular JavaScript at the top of every `.astro` file — no special function name needed.
+</Callout>
+
+## When to Use React vs Astro Components
+
+A natural question arises: if most of my components are static, should I write them in React or Astro?
+
+**Default to Astro components for static content.** Astro components are simpler (no virtual DOM, no hooks, no reconciliation), produce smaller output, and are purpose-built for static rendering. They use standard HTML with a few enhancements.
+
+**Use React components when you need client-side interactivity.** If a component needs `useState`, `useEffect`, event handlers that update the UI, or any other client-side behavior, write it in React and hydrate it with a client directive.
+
+Here is a practical rule of thumb:
+
+| Component | Use Astro | Use React |
+|---|---|---|
+| Page header/nav (static links) | Yes | No |
+| Blog post body | Yes | No |
+| Footer | Yes | No |
+| Like/upvote button | No | Yes |
+| Search with autocomplete | No | Yes |
+| Image carousel | No | Yes |
+| Comment form | No | Yes |
+| Pricing table (static) | Yes | No |
+| Pricing calculator (interactive) | No | Yes |
+
+## The Island Isolation Problem
+
+There is one significant constraint you must understand: **islands are isolated from each other**. Each hydrated React component is its own mini React application. They do not share a React context, a Redux store, or any other React-level state mechanism.
+
+Consider this scenario:
+
+```astro
+---
+import CartIcon from '../components/interactive/CartIcon.tsx';
+import AddToCartButton from '../components/interactive/AddToCartButton.tsx';
+---
+
+<header>
+  <CartIcon client:load />  <!-- Shows cart item count -->
+</header>
+
+<main>
+  <AddToCartButton client:load productId="abc-123" />
+</main>
+```
+
+In a React SPA, `CartIcon` and `AddToCartButton` would share context or a global store. Clicking "Add to Cart" would immediately update the icon's badge count. In Astro, these are two separate React roots. They do not know about each other. Clicking the button will not update the icon.
+
+### Solutions for Cross-Island State
+
+There are several strategies for sharing state across islands:
+
+**1. Nano Stores (recommended).** The `nanostores` library is framework-agnostic and designed specifically for this use case. Both islands subscribe to the same store:
+
+```tsx
+// src/stores/cart.ts
+import { atom } from 'nanostores';
+export const cartCount = atom(0);
+
+// In CartIcon.tsx
+import { useStore } from '@nanostores/react';
+import { cartCount } from '../stores/cart';
+const count = useStore(cartCount);
+
+// In AddToCartButton.tsx
+import { cartCount } from '../stores/cart';
+cartCount.set(cartCount.get() + 1);
+```
+
+**2. Custom DOM events.** Fire a `CustomEvent` from one island and listen for it in another. This is framework-agnostic and uses native browser APIs.
+
+**3. Shared URL state.** Use query parameters or hash fragments to communicate between islands. This is simple but limited to string data.
+
+<Callout type="tip" title="Nano Stores: The Astro-Recommended Approach">
+  Astro's official documentation recommends `nanostores` for cross-island state. It is tiny (less than 1 KB), works with React, Vue, Svelte, and plain JS, and was designed with islands architecture in mind. If your islands need to talk to each other, reach for `nanostores` before anything else.
+</Callout>
+
+## Common Mistakes React Developers Make
+
+Here are the pitfalls that catch React developers most often when starting with Astro:
+
+**Forgetting the client directive.** You import a React component, use it in your Astro template, and wonder why nothing works. Check: did you add `client:load` (or another directive)? Without it, you get static HTML only.
+
+**Over-hydrating.** The opposite mistake: slapping `client:load` on every React component "just to be safe." This defeats the purpose of islands. Ask yourself: does this component need to respond to user interaction in the browser? If not, skip the directive.
+
+**Trying to use React context across islands.** As discussed above, each island is its own React root. `createContext` and `useContext` only work within a single island's component tree.
+
+**Passing non-serializable props.** Functions, class instances, and other non-JSON-safe values cannot cross the Astro-to-React boundary. Keep props simple and handle event logic within the React component itself.
+
+## What You've Learned
+
+In this lesson you saw the core mechanic of Astro's islands architecture in action. A React component without a client directive produces static HTML — visible but inert. Add `client:load` and it becomes a fully interactive island, hydrated with React in the browser. Everything else on the page remains static.
+
+This is the fundamental pattern you will use every day in Astro: write your page structure in Astro components, drop in React components for the interactive parts, and add a client directive to bring them to life.
+
+But `client:load` is just one of several directives. In the next lesson, you will learn all of them — and more importantly, when to choose each one. Because in Astro, *when* a component hydrates is just as important as *whether* it hydrates.

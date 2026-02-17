@@ -1,0 +1,76 @@
+---
+/**
+ * Dynamic Lesson Route — [...slug].astro
+ * ───────────────────────────────────────
+ * This is the most important page in the project: it renders every lesson.
+ * The [...slug] filename tells Astro this is a dynamic "catch-all" route.
+ *
+ * How it works:
+ * 1. getStaticPaths() runs at build time and returns one path per lesson.
+ * 2. For each path, Astro generates a static HTML page.
+ * 3. The lesson's MDX content is rendered using the `render()` function,
+ *    which returns both the Content component and the headings array.
+ *
+ * This is Astro's equivalent of Next.js's getStaticPaths + getStaticProps,
+ * but combined into a single, simpler pattern.
+ *
+ * @see Lesson 1.2 (Project Structure & Routing) for dynamic routes.
+ * @see Lesson 3.2 (Querying & Rendering Content) for getStaticPaths and render().
+ */
+import { getCollection } from 'astro:content';
+import LessonLayout from '../../layouts/LessonLayout.astro';
+import { getPrevNext } from '../../utils/lessons';
+
+/**
+ * getStaticPaths — tells Astro which pages to generate.
+ *
+ * In React/Next.js you'd write:
+ *   export async function getStaticPaths() { ... }
+ *   export async function getStaticProps({ params }) { ... }
+ *
+ * In Astro, it's a single function that returns both the params AND the props.
+ * Each object in the returned array generates one static HTML page.
+ */
+export async function getStaticPaths() {
+  const lessons = await getCollection('lessons');
+
+  return lessons.map((lesson) => ({
+    // The `params` determine the URL. For a lesson with id "1-foundations/1-welcome.mdx",
+    // we strip the .mdx extension so the URL becomes /lessons/1-foundations/1-welcome/
+    params: { slug: lesson.id.replace(/\.mdx$/, '') },
+    // Props are passed to the page component below — no separate getStaticProps needed.
+    props: { lesson },
+  }));
+}
+
+// Astro.props gives us the props from getStaticPaths for the current page.
+const { lesson } = Astro.props;
+
+// render() compiles the MDX and returns:
+// - Content: the rendered component (like a React component you can use in JSX)
+// - headings: an array of { depth, slug, text } for building a table of contents
+const { Content, headings } = await lesson.render();
+
+// Get previous/next lesson data for navigation
+const { prev, next } = await getPrevNext(lesson.id);
+---
+
+<LessonLayout
+  title={lesson.data.title}
+  description={lesson.data.description}
+  chapter={lesson.data.chapter}
+  order={lesson.data.order}
+  difficulty={lesson.data.difficulty}
+  duration={lesson.data.duration}
+  objectives={lesson.data.objectives}
+  headings={headings}
+  prev={prev}
+  next={next}
+>
+  <!--
+    <Content /> renders the compiled MDX. Any React components imported in the
+    MDX file with client:* directives will be hydrated as interactive islands.
+    Everything else is static HTML — zero JavaScript.
+  -->
+  <Content />
+</LessonLayout>

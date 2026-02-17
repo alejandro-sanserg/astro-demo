@@ -1,0 +1,327 @@
+---
+title: API Endpoints & SSR
+description: Build server-side API routes and enable server-side rendering in Astro for dynamic, personalized, and real-time content.
+chapter: 5
+order: 2
+difficulty: advanced
+objectives:
+  - Create API endpoints that handle GET and POST requests
+  - Understand the difference between static, server, and hybrid output modes
+  - Use Astro.request, Astro.cookies, and Astro.redirect for server-side logic
+  - Know when SSR is the right choice over static generation
+  - Configure SSR adapters for different deployment platforms
+duration: "18 min"
+tags:
+  - api
+  - ssr
+  - server-side-rendering
+  - endpoints
+  - hybrid-rendering
+  - adapters
+---
+
+import Callout from '../../../components/Callout.astro';
+
+## Beyond Static: When Pages Need a Server
+
+Everything you have learned so far in this course has been about **static site generation** -- Astro builds your pages at build time, produces HTML files, and those files are served directly from a CDN. This is fast, cheap, and perfect for content that does not change per-request.
+
+But some features require a server:
+
+- **Authentication**: You need to check a session cookie before deciding what to render.
+- **Personalization**: Different users see different content based on their profile or location.
+- **Form handling**: Processing a contact form or newsletter subscription server-side.
+- **Real-time data**: Stock prices, live scores, or dashboards that must be current on every load.
+- **Protected APIs**: Endpoints that validate tokens, rate-limit requests, or talk to databases with credentials that cannot be exposed client-side.
+
+Astro handles all of these through two mechanisms: **API endpoints** and **server-side rendering (SSR)**. Let's start with endpoints.
+
+## Creating API Endpoints
+
+In Astro, any `.ts` or `.js` file inside `src/pages/` becomes a route -- and if that file exports HTTP method handlers instead of an Astro component, it becomes an **API endpoint**. No Express, no Fastify, no middleware stack. Just a file that exports functions.
+
+Here is the subscribe endpoint from this project:
+
+```typescript
+// src/pages/api/subscribe.ts
+import type { APIRoute } from 'astro';
+
+export const POST: APIRoute = async ({ request }) => {
+  const data = await request.json();
+
+  // Validate the email
+  if (!data.email || !data.email.includes('@')) {
+    return new Response(
+      JSON.stringify({ error: 'Valid email is required' }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  // In a real app, you would save to a database here
+  // await db.subscribers.create({ email: data.email });
+
+  return new Response(
+    JSON.stringify({ success: true, message: 'Subscribed!' }),
+    {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }
+  );
+};
+```
+
+This file lives at `src/pages/api/subscribe.ts`, so it is accessible at `/api/subscribe`. The `POST` export means it only responds to POST requests. If someone sends a GET request to this URL, they will get a 405 Method Not Allowed.
+
+You can export handlers for any HTTP method:
+
+```typescript
+import type { APIRoute } from 'astro';
+
+export const GET: APIRoute = async ({ params, request }) => {
+  // Handle GET requests
+  return new Response(JSON.stringify({ items: [] }));
+};
+
+export const POST: APIRoute = async ({ request }) => {
+  // Handle POST requests
+  const body = await request.json();
+  return new Response(JSON.stringify({ created: true }));
+};
+
+export const DELETE: APIRoute = async ({ params }) => {
+  // Handle DELETE requests
+  return new Response(null, { status: 204 });
+};
+```
+
+<Callout type="tip" title="Standard Web APIs">
+  Notice that Astro uses the standard `Request` and `Response` objects from the Web Fetch API -- the same APIs you use with `fetch()` in the browser. There is no proprietary request/response wrapper like Express's `req`/`res`. If you know `fetch()`, you already know how to read requests and write responses in Astro endpoints.
+</Callout>
+
+### Dynamic API Routes
+
+Just like pages, API endpoints support dynamic parameters using bracket syntax:
+
+```typescript
+// src/pages/api/users/[id].ts
+import type { APIRoute } from 'astro';
+
+export const GET: APIRoute = async ({ params }) => {
+  const { id } = params;
+
+  // Fetch user from database
+  const user = await getUser(id);
+
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Not found' }), {
+      status: 404,
+    });
+  }
+
+  return new Response(JSON.stringify(user), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+};
+```
+
+A request to `/api/users/42` will set `params.id` to `"42"`. This works identically to dynamic page routes like `[slug].astro`.
+
+## Static vs Server Output Modes
+
+By default, Astro operates in **static** mode. When you run `astro build`, every page and endpoint is pre-rendered at build time. API endpoints in static mode must define a `getStaticPaths` function so Astro knows which parameter combinations to generate.
+
+To unlock server-side features, you configure the **output mode** in `astro.config.mjs`:
+
+```javascript
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+
+export default defineConfig({
+  // Option 1: Static (default) -- everything pre-rendered at build time
+  output: 'static',
+
+  // Option 2: Server -- everything rendered on-demand by a server
+  // output: 'server',
+});
+```
+
+### Static Mode (`output: 'static'`)
+
+- All pages and endpoints are pre-rendered at build time.
+- The output is a `dist/` folder of HTML, CSS, and JS files.
+- No server required -- deploy to any static host.
+- API endpoints need `getStaticPaths` for dynamic routes.
+- This is what you have been using throughout this course.
+
+### Server Mode (`output: 'server'`)
+
+- All pages and endpoints are rendered on-demand by a server.
+- You need an **adapter** (Node.js, Vercel, Cloudflare, etc.) to run the server.
+- Full access to `Astro.request`, `Astro.cookies`, and `Astro.redirect()`.
+- Dynamic API endpoints work without `getStaticPaths`.
+
+### Hybrid Rendering: The Best of Both Worlds
+
+Here is where Astro's approach really shines compared to frameworks like Next.js. In server mode, you can opt individual pages *back* into static generation using the `prerender` export:
+
+```astro
+---
+// src/pages/about.astro
+// This page will be pre-rendered at build time, even in server mode
+export const prerender = true;
+---
+
+<h1>About Us</h1>
+<p>This page is static. It never hits the server after build.</p>
+```
+
+And in static mode, you can opt individual pages or endpoints *into* server rendering:
+
+```astro
+---
+// src/pages/dashboard.astro
+// This page requires server rendering, even in static mode
+export const prerender = false;
+---
+
+<h1>Welcome, {Astro.cookies.get('username')?.value}</h1>
+```
+
+This gives you granular, per-route control. Your marketing pages, blog posts, and documentation are statically generated for maximum performance. Your dashboard, API endpoints, and authenticated pages run on a server. Same project, same deployment, no compromise.
+
+<Callout type="info" title="Compared to Next.js">
+  Next.js also supports mixing static and dynamic rendering, but the mechanism is more implicit -- it depends on whether your component uses dynamic functions like `cookies()` or `headers()`. Astro's `prerender` export is explicit and obvious. You look at a file and immediately know how it will be rendered. No mental model about which function calls trigger which rendering mode.
+</Callout>
+
+## Server-Side Utilities
+
+When running in server mode, Astro provides several server-side utilities through the global `Astro` object.
+
+### Astro.request
+
+The standard `Request` object for the current HTTP request. You can read headers, the URL, the HTTP method, and the body.
+
+```astro
+---
+const authHeader = Astro.request.headers.get('Authorization');
+const url = new URL(Astro.request.url);
+const searchQuery = url.searchParams.get('q');
+---
+
+<p>Searching for: {searchQuery}</p>
+```
+
+### Astro.cookies
+
+A convenient API for reading and setting HTTP cookies. No need to parse the `Cookie` header manually.
+
+```astro
+---
+// Read a cookie
+const session = Astro.cookies.get('session');
+const isLoggedIn = session?.value != null;
+
+// Set a cookie
+Astro.cookies.set('visited', 'true', {
+  path: '/',
+  maxAge: 60 * 60 * 24 * 30, // 30 days
+  httpOnly: true,
+  secure: true,
+  sameSite: 'lax',
+});
+---
+
+{isLoggedIn ? <Dashboard /> : <LoginForm />}
+```
+
+### Astro.redirect()
+
+Performs a server-side redirect. This sends a proper HTTP 302 (or any status you specify) response, which is better for SEO and accessibility than a client-side redirect.
+
+```astro
+---
+const session = Astro.cookies.get('session');
+
+if (!session) {
+  return Astro.redirect('/login', 302);
+}
+
+// If we get here, the user is authenticated
+const user = await getUserFromSession(session.value);
+---
+
+<h1>Welcome back, {user.name}</h1>
+```
+
+<Callout type="warning" title="Server-only APIs">
+  `Astro.cookies.set()` and `Astro.redirect()` only work in server-rendered pages (where `prerender` is `false` or output mode is `'server'`). In static mode, cookies are read-only at build time and redirects do not make sense because there is no server to send the redirect response. If you try to use them in a pre-rendered page, Astro will throw a clear error at build time.
+</Callout>
+
+## SSR Adapters
+
+Astro itself does not include a production server. To deploy an SSR site, you install an **adapter** that converts Astro's output into a format your hosting platform understands.
+
+```bash
+# Node.js (self-hosted, Docker, Railway, etc.)
+npx astro add node
+
+# Vercel (serverless functions)
+npx astro add vercel
+
+# Cloudflare (Workers/Pages)
+npx astro add cloudflare
+
+# Netlify (serverless functions)
+npx astro add netlify
+```
+
+The `astro add` command installs the adapter package and updates your `astro.config.mjs` automatically:
+
+```javascript
+// astro.config.mjs (after adding the Vercel adapter)
+import { defineConfig } from 'astro/config';
+import vercel from '@astrojs/vercel';
+
+export default defineConfig({
+  output: 'server',
+  adapter: vercel(),
+});
+```
+
+Each adapter handles the platform-specific details:
+
+| Adapter | What it produces | Best for |
+|---------|-----------------|----------|
+| `@astrojs/node` | A standalone Node.js server | Self-hosted, Docker, VPS |
+| `@astrojs/vercel` | Vercel serverless functions | Vercel deployments |
+| `@astrojs/cloudflare` | Cloudflare Workers | Edge computing, global distribution |
+| `@astrojs/netlify` | Netlify serverless functions | Netlify deployments |
+
+<Callout type="tip" title="Start static, add SSR later">
+  You do not have to decide upfront. Start with static mode (the default), and add an adapter only when you need server-side features. Astro's hybrid rendering means you can add a single server-rendered page without converting your entire site. This is a much smoother migration path than switching a Create React App to Next.js.
+</Callout>
+
+## A Practical Pattern: Protected API + Static Frontend
+
+A common architecture combines static pages with server-rendered API endpoints. The pages are fast, cached on a CDN, and cheap to serve. The API endpoints run on a server and handle the dynamic parts:
+
+```
+src/pages/
+  index.astro              ← Static (prerender: true)
+  about.astro              ← Static (prerender: true)
+  lessons/[slug].astro     ← Static (prerender: true)
+  dashboard.astro          ← Server-rendered (prerender: false)
+  api/
+    subscribe.ts           ← Server-rendered (prerender: false)
+    auth/login.ts          ← Server-rendered (prerender: false)
+    auth/logout.ts         ← Server-rendered (prerender: false)
+```
+
+The static pages are delivered instantly from a CDN. The React islands on those pages call the API endpoints when they need to do something dynamic. The dashboard page is server-rendered because it needs to check authentication on every request. This is the same architecture pattern you would build with a React SPA + Express backend, but it is all in one Astro project, with one deployment, and shared TypeScript types.
+
+## Summary
+
+API endpoints and SSR unlock the dynamic half of web development in Astro. You can create type-safe API routes using standard Web APIs, mix static and server-rendered pages in a single project, and deploy to any platform with the right adapter. The key insight for React developers is that Astro does not force you to choose between static and dynamic at the project level -- you choose at the *page* level, which gives you the performance of static generation where it matters and the flexibility of a server where you need it.

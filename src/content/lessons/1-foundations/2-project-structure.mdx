@@ -1,0 +1,328 @@
+---
+title: Project Structure & Routing
+description: Learn how Astro projects are organized and how file-based routing works -- including dynamic routes and catch-all patterns.
+chapter: 1
+order: 2
+difficulty: beginner
+objectives:
+  - Understand the purpose of each directory in an Astro project
+  - Master file-based routing with static, dynamic, and catch-all routes
+  - Know where components, layouts, content, and assets belong
+  - Compare Astro's project structure to Next.js
+duration: "15 min"
+tags:
+  - project-structure
+  - routing
+  - file-based-routing
+  - pages
+---
+
+import Callout from '../../../components/Callout.astro';
+import FileTreeExplorer from '../../../components/interactive/FileTreeExplorer.tsx';
+
+## Exploring the Project Structure
+
+Every Astro project follows a clear, predictable structure. If you have worked with Next.js, much of this will feel familiar -- but there are important differences worth understanding.
+
+Before we walk through each directory, try clicking around the interactive file tree below. Each file and folder has a description explaining its purpose:
+
+<FileTreeExplorer client:idle />
+
+Now let's break this down in detail.
+
+## The `src/` Directory
+
+Everything your application needs to *build* lives inside `src/`. Astro processes every file in this directory -- compiling components, resolving imports, transforming styles, and generating the final output.
+
+```
+src/
+├── pages/          # Routes — each file becomes a URL
+├── components/     # Reusable UI pieces
+├── layouts/        # Page wrappers (HTML shell, navigation, etc.)
+├── content/        # Content collections (MDX/Markdown)
+├── styles/         # Global CSS files
+└── utils/          # Helper functions and utilities
+```
+
+<Callout type="tip" title="Coming from React?">
+  In a Create React App or Vite + React project, `src/` is just "where your code lives" with no enforced structure. In Astro, certain directories inside `src/` have special meaning -- most importantly `pages/` and `content/`. The rest (`components/`, `layouts/`, `styles/`, `utils/`) are conventional but not enforced. You can name them whatever you want.
+</Callout>
+
+### `src/pages/` -- File-Based Routing
+
+This is the most important directory in your project. **Every file in `src/pages/` automatically becomes a route on your site.** There is no router configuration, no `createBrowserRouter`, no route manifest. The file system *is* the router.
+
+Here is the mapping:
+
+```
+src/pages/index.astro         →  /
+src/pages/about.astro         →  /about
+src/pages/blog/index.astro    →  /blog
+src/pages/blog/first-post.astro → /blog/first-post
+src/pages/contact.astro       →  /contact
+```
+
+The rules are simple:
+
+- `index.astro` in any directory maps to the directory path itself.
+- Any other filename maps to `/<filename>` (without the `.astro` extension).
+- Nested directories create nested URL paths.
+
+<Callout type="tip" title="Coming from Next.js?">
+  This is identical to how Next.js `pages/` directory routing works (the pre-App Router version). If you have used `pages/about.tsx` in Next.js, `pages/about.astro` works exactly the same way. The main difference: Astro pages use `.astro` files instead of `.tsx`, and they render to static HTML by default with no client-side JavaScript.
+</Callout>
+
+### Dynamic Routes with `[slug]`
+
+Static routes work for pages you know ahead of time, but what about blog posts, product pages, or lessons that come from a database or content collection? That is where dynamic routes come in.
+
+```
+src/pages/blog/[slug].astro   →  /blog/hello-world
+                                  /blog/my-second-post
+                                  /blog/astro-is-great
+```
+
+Inside a dynamic route file, you need to tell Astro what values `slug` can take. You do this with the `getStaticPaths` function:
+
+```astro
+---
+// src/pages/blog/[slug].astro
+export async function getStaticPaths() {
+  const posts = await fetch('https://api.example.com/posts').then(r => r.json());
+
+  return posts.map(post => ({
+    params: { slug: post.slug },
+    props: { title: post.title, content: post.content },
+  }));
+}
+
+// Each generated page receives its props from getStaticPaths
+const { title, content } = Astro.props;
+---
+
+<h1>{title}</h1>
+<article set:html={content} />
+```
+
+When you run `astro build`, Astro calls `getStaticPaths` once and generates a separate HTML file for each returned path. If your API returns 50 posts, you get 50 HTML files.
+
+<Callout type="tip" title="Coming from Next.js?">
+  This is the Astro equivalent of `getStaticPaths` + `getStaticProps` in Next.js -- except they are combined into one function. The `params` object defines the URL, and the `props` object passes data to the page component. In Next.js, these are two separate exports.
+</Callout>
+
+### Catch-All Routes with `[...slug]`
+
+Sometimes you need a route that matches multiple levels of nesting. The rest/catch-all pattern handles this:
+
+```
+src/pages/docs/[...slug].astro  →  /docs/getting-started
+                                    /docs/guides/routing
+                                    /docs/api/reference/components
+```
+
+The `slug` parameter becomes a string containing the full path. This is exactly how this course renders lessons -- look at the actual file in this project:
+
+```astro
+---
+// src/pages/lessons/[...slug].astro
+// This single file renders EVERY lesson in the course.
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const lessons = await getCollection('lessons');
+
+  return lessons.map(lesson => ({
+    params: { slug: lesson.id },
+    props: { lesson },
+  }));
+}
+
+const { lesson } = Astro.props;
+const { Content, headings } = await lesson.render();
+---
+
+<Content />
+```
+
+One file, every lesson. The content collection provides the slugs, and Astro generates a separate HTML page for each one.
+
+### API Routes
+
+Not every route needs to return HTML. Files in `src/pages/` can also export API handlers:
+
+```typescript
+// src/pages/api/subscribe.ts
+import type { APIRoute } from 'astro';
+
+export const POST: APIRoute = async ({ request }) => {
+  const data = await request.json();
+  const { email } = data;
+
+  // Save to database, call external API, etc.
+  await subscribeUser(email);
+
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+};
+```
+
+API routes use the standard Web `Request` and `Response` APIs. No Express, no Koa, no framework-specific abstractions.
+
+<Callout type="info">
+  API routes require SSR mode (server-side rendering) or hybrid mode to work at runtime. In static mode, API routes are called at build time and their responses are saved as static JSON files. We cover SSR in Chapter 5.
+</Callout>
+
+## `src/components/` -- Reusable UI
+
+This directory holds your reusable components. In Astro, you will typically have two types:
+
+**Astro components** (`.astro`) -- static, no client-side JavaScript:
+```
+src/components/
+├── Header.astro          # Site header with navigation
+├── Footer.astro          # Site footer
+├── Sidebar.astro         # Lesson navigation sidebar
+├── Callout.astro         # Info/warning boxes (used in this lesson!)
+└── LessonNav.astro       # Previous/Next navigation
+```
+
+**Framework components** (`.tsx`, `.jsx`, `.svelte`, `.vue`) -- interactive islands:
+```
+src/components/interactive/
+├── Counter.tsx            # React component with useState
+├── ComparisonWidget.tsx   # Tabbed code comparison
+├── FileTreeExplorer.tsx   # The tree explorer you used above!
+└── HydrationVisualizer.tsx # Visual demo of hydration strategies
+```
+
+The naming convention used in this project -- putting interactive React components in an `interactive/` subfolder -- is not required, but it makes the distinction clear. At a glance, you know which components ship JavaScript and which are pure HTML.
+
+<Callout type="tip" title="Coming from React?">
+  In React, every component is a React component. In Astro, you choose: write it as an `.astro` component (zero JS, renders at build time) or as a `.tsx` React component (ships JS, hydrates in the browser). The decision is simple: does this component need `useState`, `useEffect`, or event handlers? If yes, use React. If no, use Astro.
+</Callout>
+
+## `src/layouts/` -- Page Wrappers
+
+Layouts are Astro components that wrap page content. They provide the shared structure that appears on every page (or a group of pages): the `<html>` shell, `<head>` tags, navigation, footers, and sidebars.
+
+```
+src/layouts/
+├── BaseLayout.astro      # Root layout: HTML shell, header, footer
+└── LessonLayout.astro    # Lesson pages: adds sidebar, TOC, lesson nav
+```
+
+Layouts use the `<slot />` element to render the page content passed into them. We will dive deep into layouts in Lesson 1.4.
+
+```astro
+---
+// BaseLayout.astro (simplified)
+const { title } = Astro.props;
+---
+<html>
+  <head><title>{title}</title></head>
+  <body>
+    <nav>...</nav>
+    <slot />   <!-- Page content goes here -->
+    <footer>...</footer>
+  </body>
+</html>
+```
+
+## `src/content/` -- Content Collections
+
+Content Collections are Astro's system for managing Markdown and MDX content with type safety. The `src/content/` directory contains your content organized into collections:
+
+```
+src/content/
+└── lessons/
+    ├── 1-foundations/
+    │   ├── 1-welcome.mdx         # This lesson!
+    │   ├── 2-project-structure.mdx
+    │   ├── 3-components.mdx
+    │   └── 4-layouts.mdx
+    ├── 2-styling/
+    │   └── ...
+    └── 3-content/
+        └── ...
+```
+
+Each collection has a schema (defined in `content.config.ts`) that validates frontmatter at build time. If a lesson is missing a required field like `title` or `chapter`, the build fails with a clear error message. We cover content collections thoroughly in Chapter 3.
+
+## `public/` -- Static Assets
+
+The `public/` directory holds assets that should be copied directly to the build output **without any processing**. No bundling, no optimization, no hashing.
+
+```
+public/
+├── favicon.svg
+├── fonts/
+│   └── inter-var.woff2
+└── images/
+    └── og-image.png
+```
+
+Reference these files with absolute paths starting from the root:
+
+```html
+<img src="/images/og-image.png" alt="Course banner" />
+<link rel="icon" href="/favicon.svg" />
+```
+
+<Callout type="warning">
+  Do not put files in `public/` that you import in your components. If you `import` an image or font, it should live in `src/` so Astro can optimize and fingerprint it. The `public/` directory is for files referenced by URL only -- favicons, robots.txt, manifest.json, and similar assets.
+</Callout>
+
+## Configuration Files
+
+At the project root, you will find several important configuration files:
+
+**`astro.config.mjs`** -- The main Astro configuration:
+```javascript
+import { defineConfig } from 'astro/config';
+import react from '@astrojs/react';
+import mdx from '@astrojs/mdx';
+
+export default defineConfig({
+  integrations: [react(), mdx()],
+  site: 'https://astro-for-react-devs.com',
+});
+```
+
+**`content.config.ts`** -- Defines schemas for your content collections using Zod.
+
+**`tsconfig.json`** -- TypeScript configuration. Astro extends its own strict preset and adds path aliases so you can use `@components/Header.astro` instead of relative paths.
+
+**`package.json`** -- Standard npm project file with three key scripts:
+```json
+{
+  "scripts": {
+    "dev": "astro dev",      // Start dev server with HMR
+    "build": "astro build",  // Build for production
+    "preview": "astro preview" // Preview the production build locally
+  }
+}
+```
+
+## Putting It All Together
+
+Here is the mental model for how data flows through an Astro project:
+
+```
+content.config.ts     → Defines schemas for content
+  ↓
+src/content/lessons/  → MDX files validated against schema
+  ↓
+src/pages/[...slug].astro → Dynamic route queries content collection
+  ↓
+src/layouts/LessonLayout.astro → Wraps content in lesson UI
+  ↓
+src/layouts/BaseLayout.astro   → Wraps everything in HTML shell
+  ↓
+dist/lessons/1-foundations/1-welcome/index.html → Static HTML output
+```
+
+Every page follows this pipeline: content is written in MDX, queried by a page route, wrapped in layouts, and output as static HTML. No server runtime, no client-side routing, no JavaScript bundle to download before the user sees content.
+
+In the next lesson, we will look at the building block that makes all of this work: the Astro component.

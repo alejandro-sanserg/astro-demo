@@ -1,0 +1,292 @@
+---
+title: MDX — Components in Markdown
+description: Discover MDX, the format that lets you embed interactive Astro and React components directly inside Markdown content — and realize that this very lesson is proof it works.
+chapter: 3
+order: 3
+difficulty: intermediate
+objectives:
+  - Understand what MDX is and how it extends Markdown
+  - Set up the @astrojs/mdx integration in an Astro project
+  - Import and use Astro components inside MDX files
+  - Use React components with client directives in MDX
+  - Override default HTML elements with custom components
+  - Recognize that this lesson itself demonstrates every concept it teaches
+duration: '13 min'
+tags: ['mdx', 'components', 'markdown', 'interactive', 'client-directives']
+---
+
+import Callout from '../../../components/Callout.astro';
+
+# MDX — Components in Markdown
+
+Here's something worth pausing on: **this lesson is written in MDX**. The Callout boxes you see throughout this course, the formatted code blocks, the structured frontmatter that powers the sidebar navigation — all of it is MDX in action. You're not reading *about* MDX in the abstract. You're reading a working MDX file, rendered by the same content pipeline you learned about in the previous two lessons.
+
+MDX stands for **Markdown + JSX**. It's Markdown with one superpower: you can import and use components directly in your content. Regular Markdown gives you headings, lists, code blocks, and links. MDX gives you all of that *plus* interactive widgets, styled callouts, data visualizations, embedded demos — anything a component can render.
+
+## Why MDX Matters
+
+Plain Markdown is great for blog posts and simple documentation. But the moment you need something richer — an info box, a live code example, a tabbed interface, an interactive quiz — you hit a wall. Your options in a traditional setup are:
+
+1. Write raw HTML inside your Markdown (fragile, no component reuse)
+2. Use a Markdown plugin or remark/rehype transform (complex, limited)
+3. Give up on Markdown entirely and use a full page component (loses the authoring simplicity)
+
+MDX eliminates the tradeoff. You write prose in Markdown and drop in components wherever you need them:
+
+```mdx
+# My Blog Post
+
+Here's some regular Markdown content. Nothing special.
+
+But now I need to highlight something important:
+
+<Callout type="warning" title="Heads up">
+  This is a component rendered inside Markdown.
+  It supports **Markdown formatting** inside too.
+</Callout>
+
+And we're back to regular Markdown. Easy.
+```
+
+<Callout type="tip" title="Coming from React?">
+  If you've used MDX with Next.js or Gatsby, the core concept is identical — Markdown files with JSX components. The difference in Astro is that MDX components can be **Astro components** (zero JavaScript, rendered at build time) or React components with `client:*` directives (hydrated as islands). You get to choose the cost of each component individually.
+</Callout>
+
+## Setting Up the MDX Integration
+
+Astro doesn't support MDX out of the box — you need to add the official integration. If you're starting a new project:
+
+```bash
+npx astro add mdx
+```
+
+This command does three things automatically:
+1. Installs `@astrojs/mdx` as a dependency
+2. Adds the integration to your `astro.config.mjs`
+3. Updates your TypeScript config if needed
+
+After running it, your Astro config will include:
+
+```javascript
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import mdx from '@astrojs/mdx';
+
+export default defineConfig({
+  integrations: [mdx()],
+});
+```
+
+That's the entire setup. Once the integration is installed, Astro treats `.mdx` files in your content collections (and in `src/pages/`) just like `.md` files, but with component support.
+
+## Importing Components in MDX
+
+The key feature of MDX is the ability to import and use components. Imports go at the top of the file, right after the frontmatter:
+
+```mdx
+---
+title: My Lesson
+description: A lesson that uses components
+---
+
+import Callout from '../../../components/Callout.astro';
+import CodeDemo from '../../../components/CodeDemo.astro';
+
+# Lesson Title
+
+Regular Markdown paragraph here.
+
+<Callout type="tip" title="Pro tip">
+  Components work seamlessly inside your Markdown content.
+</Callout>
+
+More Markdown content below the component.
+
+<CodeDemo filename="example.ts" />
+```
+
+A few important rules about MDX imports:
+
+- **Imports must come after the frontmatter** (after the closing `---`) but before any content
+- **Use relative paths** from the MDX file to the component
+- **Astro components work directly** — no special syntax needed
+- **Component tags must use PascalCase** (like JSX), not kebab-case
+
+### Using Astro Components in MDX
+
+Astro components are the natural fit for MDX content. They render at build time, produce zero client-side JavaScript, and support slots for nested content:
+
+```mdx
+import Callout from '../../../components/Callout.astro';
+
+<Callout type="info" title="Did you know?">
+  Everything between the opening and closing tags becomes
+  the component's **slot content**. You can use full Markdown
+  formatting here — *italics*, **bold**, `code`, and even:
+
+  - Bullet
+  - Lists
+</Callout>
+```
+
+The `<Callout>` component you see throughout this course is an Astro component. It takes `type` and `title` props, and renders the content between its tags into a `<slot />`. When Astro builds this page, the Callout is rendered to static HTML — no JavaScript is shipped to the browser for it.
+
+This is a critical difference from React-based MDX setups. In Next.js, every MDX component is a React component that ships JavaScript to the client (unless you specifically use Server Components). In Astro, components are static by default. You opt *into* JavaScript, not out of it.
+
+### Using React Components with Client Directives
+
+When you need interactivity — a toggle, a counter, a live code editor — you can use React components in MDX with client directives:
+
+```mdx
+import Counter from '../../../components/Counter.tsx';
+
+Here's a static Markdown paragraph. No JavaScript here.
+
+<Counter client:visible />
+
+And another static paragraph below the interactive component.
+```
+
+The `client:visible` directive tells Astro to hydrate the React component only when it scrolls into view. The rest of the page remains static HTML. This is Astro's **islands architecture** at work inside your content — you'll learn more about this in Chapter 4.
+
+Available client directives for MDX components:
+
+| Directive | Behavior |
+|-----------|----------|
+| `client:load` | Hydrate immediately when the page loads |
+| `client:idle` | Hydrate when the browser is idle |
+| `client:visible` | Hydrate when the component scrolls into view |
+| `client:media="(query)"` | Hydrate when a media query matches |
+| `client:only="react"` | Render only on the client (skip server render) |
+
+```mdx
+import Tabs from '../../../components/Tabs.tsx';
+import Chart from '../../../components/Chart.tsx';
+
+{/* Tabs need to work immediately for navigation */}
+<Tabs client:load items={['Preview', 'Code', 'Output']}>
+  ...
+</Tabs>
+
+{/* Chart can wait until the user scrolls to it */}
+<Chart client:visible data={chartData} />
+```
+
+<Callout type="info" title="No directive = no JavaScript">
+  If you use a React component in MDX **without** a `client:*` directive, Astro renders it to HTML at build time and ships zero JavaScript for it. The component's initial render appears on the page, but it won't be interactive. This is actually useful for components that are purely presentational.
+</Callout>
+
+## Custom Components — Overriding Default Elements
+
+MDX lets you replace the default HTML elements that Markdown generates. Want every `<h2>` to have an anchor link? Want `<code>` blocks to use a custom syntax highlighter? You can override them.
+
+In Astro, you pass custom components to the `<Content />` component when rendering:
+
+```astro
+---
+// In your [...slug].astro page
+const { Content } = await lesson.render();
+
+// Define component overrides
+import CustomH2 from '../../components/CustomH2.astro';
+import CustomPre from '../../components/CustomPre.astro';
+import CustomLink from '../../components/CustomLink.astro';
+
+const components = {
+  h2: CustomH2,
+  pre: CustomPre,
+  a: CustomLink,
+};
+---
+
+<Content components={components} />
+```
+
+The `components` prop maps HTML element names to custom components. When the MDX renderer encounters a `## Heading`, it uses your `CustomH2` instead of a plain `<h2>`. Here's what a custom heading component might look like:
+
+```astro
+---
+// src/components/CustomH2.astro
+// This replaces every <h2> in MDX content with one that has an anchor link
+const { id } = Astro.props;
+---
+
+<h2 id={id}>
+  <a href={`#${id}`} class="heading-anchor">#</a>
+  <slot />
+</h2>
+```
+
+Common element overrides include:
+
+- **`h2`, `h3`** — add anchor links for deep linking
+- **`a`** — add external link indicators or open in new tabs
+- **`pre` / `code`** — use a custom code block with copy buttons, line numbers, or syntax themes
+- **`img`** — wrap images in a figure with captions, or use Astro's optimized `<Image>` component
+- **`blockquote`** — style quotes distinctively
+
+## MDX in the Pages Directory
+
+While content collections are the recommended way to use MDX, you can also place `.mdx` files directly in `src/pages/` for one-off pages:
+
+```mdx
+---
+// src/pages/about.mdx
+layout: ../../layouts/BaseLayout.astro
+title: About This Course
+---
+
+import TeamGrid from '../../components/TeamGrid.astro';
+
+# About This Course
+
+This course teaches Astro to experienced React developers.
+
+<TeamGrid />
+```
+
+When an MDX file is in `src/pages/`, it becomes a route automatically (`/about/` in this case). The `layout` frontmatter field wraps the content in a layout component. This is simpler than the collection approach but lacks schema validation and querying capabilities.
+
+## How This Lesson Works — The Full Picture
+
+Let's trace how this very lesson goes from an MDX file to the page you're reading:
+
+1. **This file** lives at `src/content/lessons/3-content/3-mdx.mdx`
+2. **The content config** (`content.config.ts`) validates its frontmatter against the lesson schema
+3. **The glob loader** discovers it and assigns the ID `3-content/3-mdx`
+4. **`getStaticPaths()`** in `[...slug].astro` generates a page at `/lessons/3-content/3-mdx/`
+5. **`render()`** compiles this MDX — resolving the `Callout` import, processing Markdown syntax, and producing a `Content` component
+6. **The layout** receives the frontmatter data (title, objectives, duration) and the headings array, rendering the page chrome around the content
+7. **`<Content />`** renders the compiled output — the text you're reading right now
+
+The Callout boxes in this lesson are Astro components. They render at build time to static HTML. No JavaScript is loaded for them. If this lesson included an interactive React widget with `client:visible`, only that widget would ship JavaScript — everything else stays static.
+
+<Callout type="tip" title="The meta lesson">
+  This lesson is its own best example. Every concept described here — MDX imports, Astro components in content, frontmatter-driven layouts, the content collection pipeline — is actively being used to render the words you're reading. If you want to understand how MDX works, read this file's source code alongside its rendered output.
+</Callout>
+
+## Best Practices for MDX Content
+
+After working with MDX across many projects, here are patterns that scale well:
+
+**Keep imports minimal.** Each MDX file should import only the components it uses. Don't create a "kitchen sink" import block.
+
+**Prefer Astro components for static content.** Callouts, code tabs, figure captions, and other presentational components should be Astro components (zero JS). Reserve React components for genuinely interactive elements.
+
+**Use consistent component APIs.** If authors will write many MDX files, keep component props simple and well-documented. A `<Callout type="tip">` is easier to remember than `<Callout variant="tip" size="md" border={true}>`.
+
+**Leverage frontmatter for metadata, components for content.** Don't try to encode complex data structures in frontmatter. Use it for flat metadata (title, date, tags) and use components for rich content within the body.
+
+## Summary
+
+MDX bridges the gap between simple Markdown authoring and rich, component-driven pages:
+
+- **MDX = Markdown + JSX** — write prose in Markdown, drop in components where needed
+- **Astro components** render to static HTML with zero JavaScript
+- **React components** with `client:*` directives hydrate as interactive islands
+- **Custom component overrides** let you replace default HTML elements globally
+- **The `@astrojs/mdx` integration** is all you need — one install, zero ongoing configuration
+
+This lesson itself demonstrates every concept it teaches. The Callout boxes, the validated frontmatter, the content collection pipeline — it's all MDX, all the way down.
+
+Next up in Chapter 4, we'll dive deep into Astro's islands architecture — the system that makes it possible to mix static and interactive components on the same page with surgical precision.

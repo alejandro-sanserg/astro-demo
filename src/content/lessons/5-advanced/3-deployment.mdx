@@ -1,0 +1,303 @@
+---
+title: Deployment & Production
+description: Ship your Astro site to the world — static hosting, SSR adapters, environment variables, and a production readiness checklist.
+chapter: 5
+order: 3
+difficulty: advanced
+objectives:
+  - Deploy a static Astro site to popular hosting platforms
+  - Configure SSR adapters for server-rendered deployments
+  - Manage environment variables safely
+  - Optimize your site for production performance
+  - Know where to go next in your Astro journey
+duration: "18 min"
+tags:
+  - deployment
+  - production
+  - performance
+  - seo
+  - adapters
+---
+
+import Callout from '../../../components/Callout.astro';
+
+## Static Deployment
+
+By default, Astro builds a fully static site. Running `npm run build` generates a `dist/` folder containing plain HTML, CSS, and JavaScript files that can be served by any static file host.
+
+```bash
+# Build for production
+npm run build
+
+# Preview the production build locally
+npm run preview
+```
+
+The `dist/` folder is self-contained — you can upload it anywhere that serves static files.
+
+### Popular Static Hosts
+
+**Vercel:**
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy (auto-detects Astro)
+vercel
+```
+
+Or connect your GitHub repository in the Vercel dashboard. It detects Astro automatically and configures the build.
+
+**Netlify:**
+```bash
+# Install Netlify CLI
+npm i -g netlify-cli
+
+# Deploy
+netlify deploy --prod --dir=dist
+```
+
+Or connect your repo in the Netlify dashboard. Set the build command to `npm run build` and the publish directory to `dist`.
+
+**Cloudflare Pages:**
+
+Connect your GitHub repo in the Cloudflare dashboard. Set:
+- Build command: `npm run build`
+- Build output directory: `dist`
+
+**GitHub Pages:**
+
+Add the `@astrojs/github-pages` adapter or configure a GitHub Actions workflow:
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - uses: actions/deploy-pages@v4
+```
+
+<Callout type="tip" title="Coming from React?">
+  Deploying a static Astro site is simpler than deploying a Next.js app. There's no server to configure, no serverless functions to manage, and no edge runtime to think about. It's the same deployment model as Create React App — just upload the `dist/` folder.
+</Callout>
+
+## SSR Deployment with Adapters
+
+If your site uses server-side rendering (Lesson 5.2), you need an **adapter** that tells Astro how to run on your hosting platform:
+
+```bash
+# Add an adapter
+npx astro add vercel    # for Vercel
+npx astro add netlify   # for Netlify
+npx astro add cloudflare # for Cloudflare Workers
+npx astro add node      # for any Node.js server
+```
+
+The adapter is configured in `astro.config.mjs`:
+
+```javascript
+import { defineConfig } from 'astro/config';
+import node from '@astrojs/node';
+
+export default defineConfig({
+  output: 'server',
+  adapter: node({
+    mode: 'standalone',  // Runs as a standalone Node.js server
+  }),
+});
+```
+
+With `mode: 'standalone'`, the build produces an executable Node.js server. Deploy it anywhere you can run Node:
+
+```bash
+npm run build
+node dist/server/entry.mjs
+```
+
+<Callout type="info">
+  Remember: you only need an adapter if you use `output: 'server'` or have pages with `export const prerender = false`. Pure static sites don't need adapters.
+</Callout>
+
+## Environment Variables
+
+Astro uses `.env` files and the standard `import.meta.env` API:
+
+```bash
+# .env
+PUBLIC_SITE_URL=https://mysite.com
+DATABASE_URL=postgresql://localhost:5432/mydb
+SECRET_API_KEY=sk-1234567890
+```
+
+Access them in your code:
+
+```astro
+---
+// Server-side (frontmatter) — can access ALL variables
+const dbUrl = import.meta.env.DATABASE_URL;
+const apiKey = import.meta.env.SECRET_API_KEY;
+
+// These are ONLY available in server-side code (frontmatter, API routes)
+---
+
+<!-- Client-side (template) — only PUBLIC_ prefixed variables -->
+<p>Site: {import.meta.env.PUBLIC_SITE_URL}</p>
+```
+
+**Key rules:**
+- Variables prefixed with `PUBLIC_` are exposed to the browser
+- Variables without the prefix are server-only (safe for secrets)
+- `.env` is for development, `.env.production` for production overrides
+- **Never commit `.env` files** — add them to `.gitignore`
+
+<Callout type="danger" title="Security">
+  Never prefix secret keys with `PUBLIC_`. The `PUBLIC_` prefix tells Astro to bundle the value into client-side JavaScript, making it visible to anyone who views your page source. Database URLs, API keys, and tokens should never have this prefix.
+</Callout>
+
+## Build Optimization
+
+Astro optimizes your build automatically, but there are things you can do to maximize performance:
+
+### Image Optimization
+
+Use Astro's built-in `<Image />` component for automatic optimization:
+
+```astro
+---
+import { Image } from 'astro:assets';
+import heroImage from '../assets/hero.jpg';
+---
+
+<!-- Automatically generates optimized formats (WebP, AVIF) and sizes -->
+<Image src={heroImage} alt="Hero banner" width={1200} height={600} />
+```
+
+Images in `src/assets/` are processed at build time. Images in `public/` are served as-is.
+
+### Prefetching
+
+With View Transitions enabled (which this course uses), Astro prefetches linked pages when the user hovers over a link. You can configure this:
+
+```javascript
+// astro.config.mjs
+export default defineConfig({
+  prefetch: {
+    defaultStrategy: 'hover',     // Prefetch on hover (default)
+    // Other options: 'tap', 'viewport', 'load'
+  },
+});
+```
+
+### Bundle Analysis
+
+Check what's in your JavaScript bundles:
+
+```bash
+# Build with bundle analysis
+npx astro build --verbose
+```
+
+Remember: Astro ships zero JavaScript by default. Every kilobyte of client-side JS comes from components with `client:*` directives. If your bundle is too large, review which components truly need hydration.
+
+## SEO Checklist
+
+Before launching, ensure your site covers these SEO fundamentals:
+
+- **Title tags** — Every page has a unique, descriptive `<title>`
+- **Meta descriptions** — Every page has a `<meta name="description">` tag
+- **Canonical URLs** — Set `<link rel="canonical">` to prevent duplicate content
+- **Open Graph tags** — Add `og:title`, `og:description`, `og:image` for social sharing
+- **Sitemap** — Install `@astrojs/sitemap` to auto-generate a sitemap.xml
+- **robots.txt** — Add a `public/robots.txt` file
+- **Semantic HTML** — Use proper heading hierarchy (h1 → h2 → h3)
+- **Alt text** — Every image has descriptive `alt` attributes
+- **Performance** — Run Lighthouse and aim for 90+ on all metrics
+
+```bash
+# Add sitemap generation
+npx astro add sitemap
+```
+
+```javascript
+// astro.config.mjs
+import sitemap from '@astrojs/sitemap';
+
+export default defineConfig({
+  site: 'https://yoursite.com',
+  integrations: [sitemap()],
+});
+```
+
+## Performance: What to Expect
+
+Astro sites consistently achieve excellent Lighthouse scores because of the architecture:
+
+- **Performance: 95-100** — Minimal JavaScript, static HTML loads instantly
+- **Accessibility: 90-100** — Semantic HTML by default (no `<div>` soup)
+- **Best Practices: 95-100** — Modern image formats, secure headers
+- **SEO: 95-100** — Server-rendered HTML, proper meta tags
+
+The biggest performance wins come from the islands architecture:
+- Pages with no interactive components ship **zero JavaScript**
+- Pages with a few islands ship only the JavaScript for those specific components
+- `client:visible` and `client:idle` defer loading so the initial page is never blocked
+
+## What to Learn Next
+
+Congratulations — you've completed the course! Here's where to go from here:
+
+### Immediate Next Steps
+- **Build a project** — The best way to learn is by doing. Build a blog, portfolio, or documentation site with Astro.
+- **Read the source** — This course is built with Astro. Explore the `src/` directory to see every concept in action.
+- **Join the community** — The [Astro Discord](https://astro.build/chat) is active and welcoming.
+
+### Advanced Topics to Explore
+- **Astro DB** — A built-in database for content-heavy sites
+- **Content Layer API** — Load content from any source (CMS, API, database)
+- **Server Islands** — Dynamically render specific components on the server (experimental)
+- **Astro Actions** — Type-safe server functions with Zod validation
+- **Middleware** — Run code before every request (auth, logging, redirects)
+- **Custom integrations** — Build your own Astro integrations and plugins
+
+### Recommended Resources
+- [Astro Documentation](https://docs.astro.build) — The official docs are excellent
+- [Astro Blog](https://astro.build/blog) — Release notes and tutorials
+- [Astro Themes](https://astro.build/themes) — Pre-built templates for common use cases
+
+<Callout type="tip">
+  You now have a strong foundation in Astro. The key concepts — components, content collections, islands architecture, and client directives — are the building blocks for everything else. Every advanced feature builds on top of what you've learned in these 15 lessons.
+</Callout>
+
+## Course Summary
+
+Here's what you've learned across all five chapters:
+
+| Chapter | Key Takeaway |
+|---------|-------------|
+| **1. Foundations** | Astro components run at build time, producing static HTML with zero JavaScript |
+| **2. Styling** | Scoped CSS is built-in — no libraries needed, no runtime cost |
+| **3. Content & Data** | Content collections provide type-safe content management with Zod schemas |
+| **4. Islands** | Ship JavaScript only where needed, with fine-grained control over when it loads |
+| **5. Advanced** | View Transitions, API endpoints, and SSR are built-in when you need them |
+
+The mental model that ties it all together:
+
+> **Start with HTML. Add JavaScript only where you need it. Ship the minimum to the browser.**
+
+That's the Astro way. Welcome aboard, astronaut.

@@ -1,0 +1,90 @@
+---
+/**
+ * Header Component
+ * ────────────────
+ * The site-wide header with the course title and navigation links.
+ * This is a pure Astro component — no JavaScript needed, just HTML and scoped CSS.
+ *
+ * Notice: Astro components don't have state or lifecycle methods. If you need
+ * interactivity (like a mobile menu toggle), you'd use a React island for that part.
+ *
+ * @see Lesson 1.3 (Astro Components) for how Astro components work.
+ */
+---
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="/" class="logo">
+      <span class="logo-icon">🚀</span>
+      <span class="logo-text">Astro for React Devs</span>
+    </a>
+    <nav class="header-nav">
+      <a href="/lessons">All Lessons</a>
+      <a href="https://docs.astro.build" target="_blank" rel="noopener">Astro Docs ↗</a>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    height: var(--header-height);
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+    backdrop-filter: blur(8px);
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+    padding: 0 var(--space-6);
+    max-width: 100%;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 700;
+    font-size: var(--font-size-lg);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .logo:hover {
+    color: var(--color-accent-light);
+    text-decoration: none;
+  }
+
+  .logo-icon {
+    font-size: 1.5rem;
+  }
+
+  .header-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+  }
+
+  .header-nav a {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    transition: color var(--transition-fast);
+  }
+
+  .header-nav a:hover {
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  @media (max-width: 768px) {
+    .logo-text {
+      display: none;
+    }
+  }
+</style>

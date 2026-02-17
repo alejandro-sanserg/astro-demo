@@ -1,0 +1,194 @@
+---
+title: Client Directives Deep Dive
+description: Master Astro's five client directives to control exactly when and how your React components hydrate — the key to shipping minimal JavaScript.
+chapter: 4
+order: 3
+difficulty: intermediate
+objectives:
+  - Understand all five client directives and their behavior
+  - Choose the right directive for each use case
+  - Measure the performance impact of different hydration strategies
+  - Build a mental framework for hydration decisions
+duration: "20 min"
+tags:
+  - client-directives
+  - hydration
+  - performance
+  - islands
+---
+
+import Callout from '../../../components/Callout.astro';
+import Counter from '../../../components/interactive/Counter.tsx';
+import HydrationVisualizer from '../../../components/interactive/HydrationVisualizer.tsx';
+
+## The Five Client Directives
+
+In the previous lesson, you saw that React components render to static HTML by default in Astro, and you add `client:load` to make them interactive. But `client:load` is just one of **five** client directives, each with different loading behavior.
+
+Here's the complete list:
+
+| Directive | When it hydrates | Use case |
+|-----------|-----------------|----------|
+| `client:load` | Immediately on page load | Critical interactive elements above the fold |
+| `client:idle` | When the browser is idle | Non-critical UI that should be ready soon |
+| `client:visible` | When scrolled into viewport | Below-the-fold content |
+| `client:media="(query)"` | When a CSS media query matches | Mobile-only or desktop-only components |
+| `client:only="react"` | Immediately (skips SSR) | Components that can't render on the server |
+
+Let's explore each one in detail.
+
+## Hydration Timeline
+
+The interactive demo below shows how different directives affect when components become interactive. Each box loads its JavaScript at a different time:
+
+<HydrationVisualizer client:load />
+
+## `client:load` — Immediate Hydration
+
+```astro
+<Counter client:load label="I hydrate immediately" />
+```
+
+The component's JavaScript is loaded and executed as soon as the page loads. The HTML is rendered server-side first (so the user sees content immediately), then React hydrates it to make it interactive.
+
+**When to use:** Above-the-fold interactive elements that users will interact with right away. Navigation dropdowns, search inputs, authentication forms.
+
+**Trade-off:** Adds to the initial JavaScript bundle. Every `client:load` component blocks the main thread during page load.
+
+<Counter client:load label="client:load (try clicking!)" />
+
+## `client:idle` — Idle Hydration
+
+```astro
+<Counter client:idle label="I hydrate when the browser is idle" />
+```
+
+Uses `requestIdleCallback` to defer hydration until the browser has finished critical work. The component renders as static HTML first, then hydrates during an idle period.
+
+**When to use:** Interactive elements that don't need to work the instant the page loads. Code editors, comment sections, secondary navigation, interactive demos.
+
+**Trade-off:** There's a small delay before the component becomes interactive, but the page loads faster because critical resources aren't blocked.
+
+<Counter client:idle label="client:idle (slight delay)" />
+
+<Callout type="tip" title="Coming from React?">
+  In React, everything hydrates at once — there's no concept of priority. Astro's `client:idle` is similar to React 18's `startTransition` or `Suspense` for non-urgent updates, but applied at the component level and without any code changes inside the component.
+</Callout>
+
+## `client:visible` — Viewport Hydration
+
+```astro
+<Counter client:visible label="I hydrate when you scroll to me" />
+```
+
+Uses `IntersectionObserver` to hydrate the component only when it enters the viewport. If the user never scrolls down to see the component, its JavaScript is **never loaded**.
+
+**When to use:** Any interactive component below the fold. Image galleries, interactive charts, embedded widgets, comment sections at the bottom of articles.
+
+**Trade-off:** The component won't be interactive if the user scrolls to it quickly before the JavaScript loads. There's a brief moment where it looks interactive (server-rendered HTML) but doesn't respond to clicks.
+
+<Counter client:visible label="client:visible (I loaded when you scrolled here)" />
+
+## `client:media` — Media Query Hydration
+
+```astro
+<MobileMenu client:media="(max-width: 768px)" />
+```
+
+Hydrates the component only when a CSS media query matches. If the user is on a desktop, a mobile-only component never loads its JavaScript.
+
+**When to use:** Components that only make sense at certain screen sizes. Mobile navigation menus, touch-specific interactions, responsive widgets that have different desktop/mobile versions.
+
+**Trade-off:** If the user resizes their browser to match the media query, there's a delay while the JavaScript loads.
+
+## `client:only` — Client-Only Rendering
+
+```astro
+<ThreeJSScene client:only="react" />
+```
+
+This is unique: it **skips server-side rendering entirely**. The component is not rendered to HTML at build time — instead, a placeholder is inserted, and React renders the component from scratch in the browser.
+
+**When to use:** Components that depend on browser APIs not available during SSR (`window`, `document`, `canvas`, WebGL). Also useful for components from libraries that don't support SSR.
+
+**Trade-off:** The component is invisible until JavaScript loads (no server-rendered HTML preview). This means a flash of empty space on slower connections.
+
+<Callout type="warning">
+  You must specify the framework name: `client:only="react"`. This tells Astro which framework's runtime to load. Other options include `"svelte"`, `"vue"`, `"solid-js"`, and `"preact"`.
+</Callout>
+
+## Decision Framework
+
+Use this flowchart to choose the right directive:
+
+```
+Does the component need to be interactive?
+├─ No  → Don't use any directive (static HTML, zero JS)
+└─ Yes → Does it need browser-only APIs (window, canvas)?
+    ├─ Yes → client:only="react"
+    └─ No  → Is it above the fold?
+        ├─ Yes → Is it critical for the first interaction?
+        │   ├─ Yes → client:load
+        │   └─ No  → client:idle
+        └─ No  → Is it specific to a screen size?
+            ├─ Yes → client:media="(query)"
+            └─ No  → client:visible
+```
+
+In practice, most of your interactive components will use one of these three:
+- **`client:load`** for the few critical above-the-fold interactions
+- **`client:idle`** for most interactive components
+- **`client:visible`** for anything below the fold
+
+## Multiple Counters Compared
+
+Here are three identical Counter components with different directives. They all look the same, but load at different times:
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0;">
+  <Counter client:load label="client:load" variant="compact" />
+  <Counter client:idle label="client:idle" variant="compact" />
+  <Counter client:visible label="client:visible" variant="compact" />
+</div>
+
+If you open your browser's DevTools Network tab and refresh the page, you'll see that the JavaScript for each counter loads at a different time. The `client:load` counter's JS appears immediately, `client:idle` appears after a brief pause, and `client:visible` only loads when you scroll it into view.
+
+## Performance Impact
+
+The whole point of client directives is performance. Here's what each directive means for your page:
+
+| Directive | Initial JS Bundle | Time to Interactive | Content Visible |
+|-----------|------------------|--------------------|--------------------|
+| No directive | 0 bytes | N/A (static) | Immediate |
+| `client:load` | Full component JS | Fast (blocks page) | Immediate (SSR) |
+| `client:idle` | Full component JS | Slight delay | Immediate (SSR) |
+| `client:visible` | 0 until scrolled | On scroll | Immediate (SSR) |
+| `client:media` | 0 until match | On match | Immediate (SSR) |
+| `client:only` | Full component JS | Fast | Delayed (no SSR) |
+
+<Callout type="tip" title="Coming from React?">
+  In a typical React SPA, every component's JavaScript is bundled together and loaded upfront — even components the user never sees. Astro flips this model: no JavaScript by default, and you explicitly opt in per component. A page with 20 components might only ship JavaScript for 2-3 of them. The rest are pure HTML.
+</Callout>
+
+## Real-World Examples from This Course
+
+This course project uses different directives strategically:
+
+- **`client:load`** — The `HydrationVisualizer` above, because it needs to measure timing from page load
+- **`client:idle`** — The `ComparisonWidget` in Lesson 1.3, because tab switching isn't urgent
+- **`client:visible`** — The `StyleScopeDemo` in Lesson 2.1, because it's usually below the fold
+
+You can verify this by looking at the MDX source files in `src/content/lessons/`.
+
+## Wrapping Up
+
+Client directives are Astro's superpower. They give you **fine-grained control over when JavaScript loads**, something that's impossible in a traditional React SPA without complex code-splitting and lazy loading setups.
+
+The key mental shift:
+
+> **React:** Everything is interactive by default. You optimize by removing JavaScript (code splitting, lazy loading, tree shaking).
+>
+> **Astro:** Nothing is interactive by default. You add JavaScript surgically, per component, with the exact loading strategy you choose.
+
+This is why Astro sites consistently score 95-100 on Lighthouse performance audits — they ship only the JavaScript that's actually needed, loaded at exactly the right time.
+
+In the next chapter, we'll explore advanced features that bring the polish: View Transitions, API endpoints, and deployment.

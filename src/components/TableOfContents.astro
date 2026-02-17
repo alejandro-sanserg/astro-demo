@@ -1,0 +1,75 @@
+---
+/**
+ * TableOfContents Component
+ * ─────────────────────────
+ * Auto-generates a table of contents from the lesson's headings.
+ * In Astro, when you render MDX content, the `render()` function returns
+ * a `headings` array with { depth, slug, text } objects. We use that here.
+ *
+ * This is a static component — the TOC is generated at build time.
+ * If you wanted scroll-spy highlighting, you'd add a small client-side script.
+ *
+ * @see Lesson 3.2 (Querying & Rendering Content) for how headings are extracted.
+ */
+interface Props {
+  headings: { depth: number; slug: string; text: string }[];
+}
+
+const { headings } = Astro.props;
+
+// Only show h2 and h3 headings in the TOC for readability
+const tocHeadings = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
+---
+
+{tocHeadings.length > 0 && (
+  <nav class="toc" aria-label="Table of contents">
+    <h4 class="toc-title">On this page</h4>
+    <ul class="toc-list">
+      {tocHeadings.map((heading) => (
+        <li class:list={['toc-item', `depth-${heading.depth}`]}>
+          <a href={`#${heading.slug}`}>{heading.text}</a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+)}
+
+<style>
+  .toc-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-3);
+    margin-top: 0;
+  }
+
+  .toc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .toc-item {
+    margin-bottom: var(--space-1);
+  }
+
+  .toc-item a {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    text-decoration: none;
+    line-height: 1.4;
+    display: block;
+    padding: var(--space-1) 0;
+    transition: color var(--transition-fast);
+  }
+
+  .toc-item a:hover {
+    color: var(--color-accent-light);
+  }
+
+  .toc-item.depth-3 {
+    padding-left: var(--space-3);
+  }
+</style>

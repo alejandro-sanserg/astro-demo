@@ -1,0 +1,50 @@
+---
+/**
+ * BaseHead Component
+ * ──────────────────
+ * Renders the <head> contents shared by every page: meta tags, fonts,
+ * and the global stylesheet. In Astro, there's no <Helmet> or <Head>
+ * wrapper like in React — you simply render <head> content in a layout.
+ *
+ * Props:
+ * - title: The page <title> — also used in Open Graph meta.
+ * - description: The meta description — important for SEO and social sharing.
+ *
+ * @see Lesson 1.4 (Layouts & Composition) for how this fits into the layout system.
+ */
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+
+// Astro.site is defined in astro.config.mjs — used here for canonical URLs.
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+---
+
+<!-- Global Metadata -->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<meta name="generator" content={Astro.generator} />
+
+<!-- Fonts — loaded from Google Fonts for simplicity -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+  rel="stylesheet"
+/>
+
+<!-- Primary Meta Tags -->
+<title>{title}</title>
+<meta name="title" content={title} />
+<meta name="description" content={description} />
+<link rel="canonical" href={canonicalURL} />
+
+<!-- Open Graph / Social -->
+<meta property="og:type" content="website" />
+<meta property="og:url" content={canonicalURL} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />

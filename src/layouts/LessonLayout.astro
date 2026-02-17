@@ -1,0 +1,270 @@
+---
+/**
+ * LessonLayout
+ * ────────────
+ * The layout used by every lesson page. It wraps BaseLayout and adds:
+ * - A sidebar with chapter/lesson navigation
+ * - A table of contents generated from the lesson's headings
+ * - Previous/Next lesson navigation
+ * - Lesson metadata (difficulty, duration, objectives)
+ *
+ * This is a great example of nested layouts in Astro: LessonLayout wraps
+ * BaseLayout, which provides the HTML shell. Each layout adds its own layer
+ * of structure and styling.
+ *
+ * @see Lesson 1.4 (Layouts & Composition) for how nested layouts work.
+ */
+import BaseLayout from './BaseLayout.astro';
+import Sidebar from '../components/Sidebar.astro';
+import LessonNav from '../components/LessonNav.astro';
+import TableOfContents from '../components/TableOfContents.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  chapter: number;
+  order: number;
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  duration: string;
+  objectives: string[];
+  headings: { depth: number; slug: string; text: string }[];
+  prev: { slug: string; title: string } | null;
+  next: { slug: string; title: string } | null;
+}
+
+const { title, description, chapter, order, difficulty, duration, objectives, headings, prev, next } = Astro.props;
+
+// Map difficulty levels to colors for the badge
+const difficultyColors: Record<string, string> = {
+  beginner: 'var(--color-success)',
+  intermediate: 'var(--color-warning)',
+  advanced: 'var(--color-danger)',
+};
+
+// Chapter names for the breadcrumb
+const chapterNames: Record<number, string> = {
+  1: 'Foundations',
+  2: 'Styling',
+  3: 'Content & Data',
+  4: 'Islands Architecture',
+  5: 'Advanced Features',
+};
+---
+
+<BaseLayout title={`${title} | Astro for React Developers`} description={description}>
+  <div class="lesson-layout">
+    <!--
+      The sidebar persists across page navigations thanks to transition:persist.
+      This means it won't re-render when navigating between lessons, preserving
+      scroll position and any expanded/collapsed state.
+
+      @see Lesson 5.1 (View Transitions) for transition:persist.
+    -->
+    <aside class="sidebar-container" transition:persist="sidebar">
+      <Sidebar />
+    </aside>
+
+    <article class="lesson-content">
+      <!-- Breadcrumb navigation -->
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="/">Home</a>
+        <span class="separator">/</span>
+        <a href="/lessons">Lessons</a>
+        <span class="separator">/</span>
+        <span>Chapter {chapter}: {chapterNames[chapter]}</span>
+      </nav>
+
+      <!-- Lesson header with metadata -->
+      <header class="lesson-header">
+        <div class="lesson-meta">
+          <span class="badge" style={`--badge-color: ${difficultyColors[difficulty]}`}>
+            {difficulty}
+          </span>
+          <span class="duration">{duration}</span>
+          <span class="chapter-label">Chapter {chapter} · Lesson {order}</span>
+        </div>
+        <h1>{title}</h1>
+        <p class="lesson-description">{description}</p>
+
+        {objectives.length > 0 && (
+          <div class="objectives">
+            <h4>What you'll learn</h4>
+            <ul>
+              {objectives.map((obj) => (
+                <li>{obj}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </header>
+
+      <hr />
+
+      <!-- The lesson MDX content is rendered here via <slot /> -->
+      <div class="prose">
+        <slot />
+      </div>
+
+      <hr />
+
+      <!-- Previous / Next lesson navigation -->
+      <LessonNav prev={prev} next={next} />
+    </article>
+
+    <!-- Table of Contents (right sidebar on wide screens) -->
+    {headings.length > 0 && (
+      <aside class="toc-container">
+        <TableOfContents headings={headings} />
+      </aside>
+    )}
+  </div>
+</BaseLayout>
+
+<style>
+  .lesson-layout {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) 1fr;
+    max-width: 100%;
+    min-height: calc(100vh - var(--header-height));
+  }
+
+  .sidebar-container {
+    position: sticky;
+    top: var(--header-height);
+    height: calc(100vh - var(--header-height));
+    overflow-y: auto;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    padding: var(--space-4) 0;
+  }
+
+  .lesson-content {
+    max-width: var(--content-max-width);
+    padding: var(--space-8) var(--space-8) var(--space-16);
+    margin: 0 auto;
+  }
+
+  .toc-container {
+    display: none;
+  }
+
+  /* Breadcrumb */
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-6);
+  }
+
+  .breadcrumb a {
+    color: var(--color-text-secondary);
+  }
+
+  .separator {
+    color: var(--color-text-muted);
+  }
+
+  /* Lesson header */
+  .lesson-header {
+    margin-bottom: var(--space-6);
+  }
+
+  .lesson-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    font-size: var(--font-size-sm);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: var(--space-1) var(--space-3);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--badge-color) 15%, transparent);
+    color: var(--badge-color);
+    font-weight: 500;
+    text-transform: capitalize;
+    font-size: 0.75rem;
+  }
+
+  .duration {
+    color: var(--color-text-secondary);
+  }
+
+  .chapter-label {
+    color: var(--color-text-muted);
+  }
+
+  .lesson-description {
+    font-size: var(--font-size-lg);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-6);
+  }
+
+  /* Learning objectives box */
+  .objectives {
+    background: var(--color-accent-subtle);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+    border-radius: var(--border-radius);
+    padding: var(--space-4) var(--space-6);
+  }
+
+  .objectives h4 {
+    color: var(--color-accent-light);
+    margin-top: 0;
+    margin-bottom: var(--space-3);
+    font-size: var(--font-size-base);
+  }
+
+  .objectives ul {
+    margin-bottom: 0;
+    padding-left: var(--space-4);
+  }
+
+  .objectives li {
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-1);
+  }
+
+  /* Prose content area */
+  .prose {
+    line-height: 1.8;
+  }
+
+  /* ─── Responsive ─── */
+
+  /* Show TOC on wide screens */
+  @media (min-width: 1280px) {
+    .lesson-layout {
+      grid-template-columns: var(--sidebar-width) 1fr 220px;
+    }
+
+    .toc-container {
+      display: block;
+      position: sticky;
+      top: var(--header-height);
+      height: calc(100vh - var(--header-height));
+      overflow-y: auto;
+      padding: var(--space-8) var(--space-4);
+      font-size: var(--font-size-sm);
+    }
+  }
+
+  /* Collapse sidebar on small screens */
+  @media (max-width: 768px) {
+    .lesson-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar-container {
+      display: none;
+    }
+
+    .lesson-content {
+      padding: var(--space-4) var(--space-4) var(--space-12);
+    }
+  }
+</style>

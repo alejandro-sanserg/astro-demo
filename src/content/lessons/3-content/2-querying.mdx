@@ -1,0 +1,322 @@
+---
+title: Querying & Rendering Content
+description: Learn how to query content collections, generate static pages from entries, and render MDX content using Astro's built-in APIs — the content layer you wish React had.
+chapter: 3
+order: 2
+difficulty: intermediate
+objectives:
+  - Use getCollection() and getEntry() to fetch content entries
+  - Filter and sort collection entries with TypeScript
+  - Generate static pages from content using getStaticPaths()
+  - Render MDX content with the render() function
+  - Access frontmatter data through entry.data
+duration: '14 min'
+tags: ['getCollection', 'getEntry', 'getStaticPaths', 'render', 'dynamic-routes']
+---
+
+import Callout from '../../../components/Callout.astro';
+
+# Querying & Rendering Content
+
+In the previous lesson, you learned how content collections define *what* your content looks like. Now it's time to use that content — fetching entries, generating pages, and rendering MDX into HTML. This is where Astro's content layer really shines compared to the manual wiring you'd do in React.
+
+## getCollection() — Fetching All Entries
+
+The `getCollection()` function is your primary tool for fetching content. Import it from `astro:content` and pass the collection name:
+
+```astro
+---
+import { getCollection } from 'astro:content';
+
+const allLessons = await getCollection('lessons');
+---
+```
+
+This returns an array of **collection entries**. Each entry has this shape:
+
+```typescript
+{
+  id: string;           // e.g., "3-content/2-querying"
+  data: {               // Your validated frontmatter — fully typed!
+    title: string;
+    description: string;
+    chapter: number;
+    order: number;
+    difficulty: 'beginner' | 'intermediate' | 'advanced';
+    objectives: string[];
+    duration: string;
+    tags: string[];
+  };
+  body: string;         // Raw MDX/Markdown content (unprocessed)
+  render: () => Promise<{ Content: AstroComponent; headings: Heading[] }>;
+}
+```
+
+Notice that `data` is fully typed based on your Zod schema from `content.config.ts`. There's no `any`, no `unknown`, no guessing — TypeScript knows exactly what fields exist and what types they have.
+
+<Callout type="tip" title="Coming from React?">
+  In a React + Next.js project, you'd use `getStaticProps` to read files from disk, parse frontmatter with `gray-matter`, and manually type the result. In Astro, `getCollection()` handles all of that in one call — file reading, frontmatter parsing, schema validation, and TypeScript typing. One function replaces an entire data-fetching pipeline.
+</Callout>
+
+### Filtering Collections
+
+`getCollection()` accepts an optional filter function as its second argument. This runs at build time, so it costs nothing at runtime:
+
+```astro
+---
+import { getCollection } from 'astro:content';
+
+// Only lessons from Chapter 3
+const chapter3 = await getCollection('lessons', ({ data }) => {
+  return data.chapter === 3;
+});
+
+// Only intermediate or advanced lessons
+const advancedLessons = await getCollection('lessons', ({ data }) => {
+  return data.difficulty !== 'beginner';
+});
+
+// Exclude drafts (if your schema has a draft field)
+const published = await getCollection('posts', ({ data }) => {
+  return data.draft !== true;
+});
+---
+```
+
+The filter callback receives each entry and returns a boolean. Astro also uses this for **type narrowing** — the returned array's type reflects the filter, so TypeScript knows what you're working with.
+
+### Sorting Entries
+
+`getCollection()` doesn't guarantee a specific order, so you'll usually sort the results. Here's how this project sorts lessons by chapter and order:
+
+```typescript
+const lessons = await getCollection('lessons');
+
+const sorted = lessons.sort((a, b) => {
+  if (a.data.chapter !== b.data.chapter) {
+    return a.data.chapter - b.data.chapter;
+  }
+  return a.data.order - b.data.order;
+});
+```
+
+This is plain JavaScript array sorting — nothing Astro-specific. Because `data.chapter` and `data.order` are typed as `number` (thanks to the Zod schema), TypeScript ensures you can't accidentally sort on a nonexistent field.
+
+In this project, we've extracted this pattern into a reusable utility:
+
+```typescript
+// src/utils/lessons.ts
+export async function getSortedLessons() {
+  const lessons = await getCollection('lessons');
+  return lessons.sort((a, b) => {
+    if (a.data.chapter !== b.data.chapter) return a.data.chapter - b.data.chapter;
+    return a.data.order - b.data.order;
+  });
+}
+```
+
+## getEntry() — Fetching a Single Entry
+
+When you know the exact entry you want, use `getEntry()` instead of fetching the whole collection:
+
+```astro
+---
+import { getEntry } from 'astro:content';
+
+const lesson = await getEntry('lessons', '3-content/1-collections');
+// lesson.data.title → "Content Collections"
+---
+```
+
+The second argument is the entry's ID — the file path relative to the collection's base directory, without the extension. For a file at `src/content/lessons/3-content/1-collections.mdx`, the ID is `3-content/1-collections`.
+
+`getEntry()` returns a single entry or `undefined` if not found. It's useful for:
+- Fetching a specific entry by a known ID
+- Building "related content" links
+- Resolving references between collections
+
+## getStaticPaths() — Generating Pages from Content
+
+This is where content collections connect to Astro's routing system. To generate one page per lesson, you use a **dynamic route** with `getStaticPaths()`.
+
+Here's the actual `[...slug].astro` file from this project:
+
+```astro
+---
+// src/pages/lessons/[...slug].astro
+import { getCollection } from 'astro:content';
+import LessonLayout from '../../layouts/LessonLayout.astro';
+
+export async function getStaticPaths() {
+  const lessons = await getCollection('lessons');
+
+  return lessons.map((lesson) => ({
+    params: { slug: lesson.id },
+    props: { lesson },
+  }));
+}
+
+const { lesson } = Astro.props;
+const { Content, headings } = await lesson.render();
+---
+
+<LessonLayout
+  title={lesson.data.title}
+  description={lesson.data.description}
+  chapter={lesson.data.chapter}
+  headings={headings}
+>
+  <Content />
+</LessonLayout>
+```
+
+Let's break this down step by step.
+
+### How getStaticPaths() Works
+
+1. **Astro calls `getStaticPaths()` at build time** — before any HTML is generated.
+2. **The function returns an array of objects**, each with `params` and optional `props`.
+3. **Each object generates one static HTML page.** For a lesson with ID `3-content/2-querying`, Astro creates the page at `/lessons/3-content/2-querying/`.
+
+```typescript
+return lessons.map((lesson) => ({
+  // params → determines the URL
+  params: { slug: lesson.id },
+  // props → passed to the page component
+  props: { lesson },
+}));
+```
+
+The `params` object fills in the dynamic segments of the filename. Since our file is `[...slug].astro`, the `slug` param determines the URL path. The spread syntax (`...`) means it can match multiple path segments like `3-content/2-querying`.
+
+The `props` object is passed directly to the page component via `Astro.props`. This is Astro's elegant alternative to having a separate data-fetching function — the path and its data are returned together.
+
+<Callout type="info" title="Coming from Next.js?">
+  In Next.js, you split this into two functions: `getStaticPaths()` returns the paths, and `getStaticProps({ params })` fetches the data for each path. In Astro, it's a single function that returns **both** the params and the props. Less boilerplate, fewer places for things to go wrong.
+</Callout>
+
+### Accessing Props in the Page
+
+After `getStaticPaths()` runs, Astro renders the page component for each entry. You access the props in the frontmatter:
+
+```astro
+---
+const { lesson } = Astro.props;
+
+// lesson.data is fully typed from your Zod schema
+console.log(lesson.data.title);       // "Querying & Rendering Content"
+console.log(lesson.data.chapter);     // 3
+console.log(lesson.data.objectives);  // ["Use getCollection()...", ...]
+---
+```
+
+Everything on `lesson.data` is typed and validated. If you try to access `lesson.data.nonexistent`, TypeScript catches it in your editor.
+
+## The render() Function — MDX to HTML
+
+Each collection entry has a `render()` method that compiles the MDX/Markdown body into a renderable Astro component:
+
+```astro
+---
+const { Content, headings } = await lesson.render();
+---
+
+<!-- Content is a component — use it like any other -->
+<Content />
+```
+
+The `render()` function returns an object with:
+
+- **`Content`** — an Astro component containing the rendered HTML. Drop it into your template with `<Content />` and it renders the full lesson body.
+- **`headings`** — an array of heading objects extracted from the content, perfect for building a table of contents:
+
+```typescript
+// headings example
+[
+  { depth: 2, slug: 'getcollection', text: 'getCollection() — Fetching All Entries' },
+  { depth: 3, slug: 'filtering-collections', text: 'Filtering Collections' },
+  { depth: 3, slug: 'sorting-entries', text: 'Sorting Entries' },
+  { depth: 2, slug: 'getentry', text: 'getEntry() — Fetching a Single Entry' },
+  // ...
+]
+```
+
+Each heading has a `depth` (2 for `##`, 3 for `###`, etc.), a `slug` (auto-generated from the text for anchor links), and the raw `text`. This project uses the headings array to render the sidebar table of contents you see on every lesson page.
+
+<Callout type="warning" title="render() is async">
+  Don't forget to `await` the `render()` call. It's async because Astro compiles MDX on demand. The `Content` component it returns is already processed — there's no client-side compilation happening.
+</Callout>
+
+## Putting It All Together — A Lesson Index Page
+
+Here's how you'd build a page listing all lessons grouped by chapter, using everything from this lesson:
+
+```astro
+---
+// src/pages/lessons/index.astro
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const lessons = await getCollection('lessons');
+
+// Sort by chapter, then by order within each chapter
+const sorted = lessons.sort((a, b) => {
+  if (a.data.chapter !== b.data.chapter) return a.data.chapter - b.data.chapter;
+  return a.data.order - b.data.order;
+});
+
+// Group by chapter using a Map
+const chapters = new Map<number, typeof sorted>();
+for (const lesson of sorted) {
+  const ch = lesson.data.chapter;
+  if (!chapters.has(ch)) chapters.set(ch, []);
+  chapters.get(ch)!.push(lesson);
+}
+---
+
+<BaseLayout title="All Lessons">
+  {[...chapters.entries()].map(([chapterNum, chapterLessons]) => (
+    <section>
+      <h2>Chapter {chapterNum}</h2>
+      <ul>
+        {chapterLessons.map((lesson) => (
+          <li>
+            <a href={`/lessons/${lesson.id}/`}>
+              {lesson.data.title}
+            </a>
+            <span>{lesson.data.duration}</span>
+            <span>{lesson.data.difficulty}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ))}
+</BaseLayout>
+```
+
+This entire page runs at build time. No API calls, no loading states, no client-side JavaScript. The HTML is generated once and served statically.
+
+## The Content Query Lifecycle
+
+Here's the full flow from content file to rendered page:
+
+1. **Author** writes an MDX file with frontmatter in `src/content/lessons/`
+2. **Schema** validates the frontmatter at build time (from `content.config.ts`)
+3. **getStaticPaths()** queries the collection and returns one path per entry
+4. **Astro** generates a static page for each path
+5. **render()** compiles the MDX body into a `Content` component
+6. **The template** renders `<Content />` inside a layout with frontmatter data
+
+Every step is type-safe. Every error is caught at build time. No runtime surprises.
+
+## Summary
+
+Astro gives you three functions to work with content collections:
+
+| Function | Purpose | Returns |
+|----------|---------|---------|
+| `getCollection('name')` | Fetch all entries (with optional filter) | `Entry[]` |
+| `getEntry('name', 'id')` | Fetch a single entry by ID | `Entry \| undefined` |
+| `entry.render()` | Compile MDX/Markdown to a component | `{ Content, headings }` |
+
+Combined with `getStaticPaths()`, these functions let you generate an entire static site from your content collection with minimal code and maximum type safety. In the next lesson, we'll explore MDX itself — the format that lets you embed interactive components directly inside your Markdown content.

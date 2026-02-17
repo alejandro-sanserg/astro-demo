@@ -1,0 +1,248 @@
+---
+title: Layouts & Composition
+description: Create reusable page layouts with slots, nested layouts, and head management — Astro's answer to React's layout patterns.
+chapter: 1
+order: 4
+difficulty: beginner
+objectives:
+  - Create a base layout with the HTML shell and shared UI
+  - Use slots to inject page content into layouts
+  - Compose nested layouts for different page types
+  - Manage head tags and SEO metadata
+duration: "15 min"
+tags:
+  - layouts
+  - slots
+  - composition
+  - seo
+---
+
+import Callout from '../../../components/Callout.astro';
+
+## What Are Layouts?
+
+Layouts are Astro components that wrap page content in a reusable shell. They provide the shared structure that appears on every page — the `<html>` document, `<head>` tags, navigation, sidebars, and footers.
+
+If you've used Next.js's `layout.tsx` files or wrapped your React app in a `<Layout>` component, the concept is identical. The difference is in the mechanism: Astro uses `<slot />` instead of `{children}`.
+
+## A Minimal Layout
+
+Here's the simplest possible layout:
+
+```astro
+---
+// src/layouts/BaseLayout.astro
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
+```
+
+And a page using it:
+
+```astro
+---
+// src/pages/index.astro
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Home">
+  <h1>Welcome!</h1>
+  <p>This content fills the slot in BaseLayout.</p>
+</BaseLayout>
+```
+
+The `<slot />` in the layout is replaced by everything between the opening and closing `<BaseLayout>` tags. The result is a complete HTML document with the page content injected into the body.
+
+<Callout type="tip" title="Coming from React?">
+  In React, you'd write `{children}` inside a layout component. Astro's `<slot />` works the same way but uses the web-standard slot API (also used in Web Components and Vue). The visual result is identical — content flows from the page into the layout.
+</Callout>
+
+## This Project's BaseLayout
+
+Let's look at the actual `BaseLayout.astro` used by this course. It demonstrates several real-world patterns:
+
+```astro
+---
+import { ClientRouter } from 'astro:transitions';
+import BaseHead from '../components/BaseHead.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead title={title} description={description} />
+    <ClientRouter />
+  </head>
+  <body>
+    <Header />
+    <main>
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>
+```
+
+Key things to notice:
+
+1. **Importing CSS** — `import '../styles/global.css'` loads global styles. Astro processes and bundles this automatically.
+2. **Component composition** — `BaseHead`, `Header`, and `Footer` are separate components imported into the layout. Each one is reusable and independently maintainable.
+3. **View Transitions** — `<ClientRouter />` enables smooth page transitions with one line. We cover this in Lesson 5.1.
+4. **Props for SEO** — The layout accepts `title` and `description` which are passed to `BaseHead` for meta tags.
+
+## Nested Layouts
+
+Layouts can wrap other layouts. This course uses two levels:
+
+- **BaseLayout** — The HTML shell, global styles, header, footer
+- **LessonLayout** — Extends BaseLayout with a sidebar, table of contents, and lesson navigation
+
+```astro
+---
+// src/layouts/LessonLayout.astro (simplified)
+import BaseLayout from './BaseLayout.astro';
+import Sidebar from '../components/Sidebar.astro';
+import LessonNav from '../components/LessonNav.astro';
+
+const { title, description, prev, next } = Astro.props;
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="lesson-layout">
+    <aside>
+      <Sidebar />
+    </aside>
+    <article>
+      <slot />
+    </article>
+  </div>
+  <LessonNav prev={prev} next={next} />
+</BaseLayout>
+```
+
+The nesting works because `<slot />` in BaseLayout receives everything inside `<BaseLayout>` tags — which includes the entire LessonLayout structure.
+
+```
+Page Content
+  └─ LessonLayout (adds sidebar, nav)
+       └─ BaseLayout (adds HTML shell, header, footer)
+            └─ Final HTML document
+```
+
+<Callout type="info">
+  There's no limit to nesting depth, but two levels is usually sufficient. Three or more layouts can make the hierarchy hard to follow.
+</Callout>
+
+## Named Slots for Complex Layouts
+
+When you need multiple insertion points in a layout, use named slots:
+
+```astro
+---
+// DashboardLayout.astro
+---
+
+<div class="dashboard">
+  <header>
+    <slot name="header" />
+  </header>
+  <nav>
+    <slot name="sidebar" />
+  </nav>
+  <main>
+    <slot />  <!-- Default slot for main content -->
+  </main>
+</div>
+```
+
+```astro
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+---
+
+<DashboardLayout>
+  <h1 slot="header">Dashboard</h1>
+
+  <ul slot="sidebar">
+    <li><a href="/dashboard">Overview</a></li>
+    <li><a href="/dashboard/settings">Settings</a></li>
+  </ul>
+
+  <!-- No slot attribute = goes into the default slot -->
+  <div class="metrics">
+    <p>Your main dashboard content here.</p>
+  </div>
+</DashboardLayout>
+```
+
+<Callout type="tip" title="Coming from React?">
+  Named slots replace the React pattern of passing components as props: `sidebar={<Nav />}`. Both approaches work — Astro's is more declarative (annotating content with `slot="name"`) while React's is more explicit (passing JSX as props). If you've used Vue, Astro's named slots work identically.
+</Callout>
+
+## Head Management
+
+Unlike React (where you need `react-helmet` or Next.js `<Head>`), Astro has no special component for managing `<head>` tags. You simply write them directly in your layout:
+
+```astro
+---
+const { title, description, ogImage } = Astro.props;
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+---
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width" />
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <link rel="canonical" href={canonicalURL} />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  {ogImage && <meta property="og:image" content={ogImage} />}
+</head>
+```
+
+This project extracts head management into a `BaseHead.astro` component for reuse. That component receives props from the layout, which receives them from each page. The data flows downward, just like in React.
+
+## Layout Best Practices
+
+1. **Keep layouts thin** — Layouts should handle structure, not business logic. Fetch data in pages, pass it to layouts via props.
+2. **Two levels is usually enough** — BaseLayout for the HTML shell, a content-specific layout (BlogLayout, DocsLayout) for the inner structure.
+3. **Extract repeated head tags** — Create a `BaseHead.astro` component so you don't duplicate meta tags across layouts.
+4. **Use CSS scoped styles** — Layout styles stay scoped to the layout. Child components won't be affected unless you use `:global()`.
+
+## Wrapping Up
+
+Layouts in Astro follow the same composition patterns you know from React, with two key differences:
+
+- **`<slot />`** instead of `{children}` for content injection
+- **Named slots** instead of passing components as props
+
+The result is the same: reusable page structures that wrap content in shared UI. Every page in this course flows through `LessonLayout → BaseLayout`, and you can trace that chain by reading the source code in `src/layouts/`.
+
+Next up: Chapter 2, where we explore how Astro handles styling with automatic CSS scoping.

@@ -1,0 +1,343 @@
+---
+title: "Tailwind CSS in Astro"
+description: "Set up and use Tailwind CSS in Astro projects, combine it with scoped styles, and learn when to reach for each approach."
+chapter: 2
+order: 2
+difficulty: "beginner"
+objectives:
+  - "Install and configure Tailwind CSS via the Astro integration"
+  - "Use Tailwind utility classes in .astro components"
+  - "Combine Tailwind with the class:list directive"
+  - "Understand the trade-offs between Tailwind and scoped CSS"
+  - "Decide when to use utility classes vs scoped styles"
+duration: "15 min"
+tags: ["tailwind", "css", "styling", "utility-classes", "integrations"]
+---
+
+import Callout from '../../../components/Callout.astro';
+
+# Tailwind CSS in Astro
+
+Tailwind CSS is one of the most popular styling approaches in the React ecosystem, and it works beautifully with Astro. In fact, Astro has an official integration that makes setup a single command. If you are already comfortable with Tailwind from your React projects, you will feel right at home -- and you might appreciate some of the ergonomic improvements Astro brings to the table.
+
+## Installing Tailwind
+
+Astro provides an official `@astrojs/tailwind` integration. The easiest way to add it is with the `astro add` CLI:
+
+```bash
+npx astro add tailwind
+```
+
+This single command does several things automatically:
+
+1. Installs `@astrojs/tailwind` and `tailwindcss` as dependencies
+2. Adds the integration to your `astro.config.mjs`
+3. Creates a `tailwind.config.mjs` file if one does not exist
+
+After running the command, your Astro config will look something like this:
+
+```js
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import tailwind from '@astrojs/tailwind';
+
+export default defineConfig({
+  integrations: [tailwind()],
+});
+```
+
+And you will have a Tailwind config ready to customize:
+
+```js
+// tailwind.config.mjs
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./src/**/*.{astro,html,js,jsx,md,mdx,svelte,ts,tsx,vue}'],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
+```
+
+<Callout type="tip" title="Coming from React?">
+  In a React project (Create React App, Next.js, Vite), you typically install `tailwindcss`, `postcss`, and `autoprefixer`, then create both `tailwind.config.js` and `postcss.config.js`, then add `@tailwind` directives to a global CSS file. Astro's integration handles all of this for you. One command, zero config files to manage manually.
+</Callout>
+
+## How the Integration Works
+
+The Astro Tailwind integration automatically:
+
+- **Injects Tailwind's base styles** (Preflight) into every page. You do not need to add `@tailwind base; @tailwind components; @tailwind utilities;` to any CSS file -- the integration handles it.
+- **Scans your source files** for class names based on the `content` paths in your Tailwind config.
+- **Processes and optimizes** the output CSS, tree-shaking unused utilities in production builds.
+
+If you want to disable Preflight (Tailwind's opinionated CSS reset), you can configure the integration:
+
+```js
+// astro.config.mjs
+export default defineConfig({
+  integrations: [
+    tailwind({
+      applyBaseStyles: false, // Disable automatic Preflight injection
+    }),
+  ],
+});
+```
+
+If you disable base styles and still want Tailwind's directives, create your own CSS file:
+
+```css
+/* src/styles/tailwind.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+Then import it in your layout:
+
+```astro
+---
+// src/layouts/BaseLayout.astro
+import '../styles/tailwind.css';
+---
+```
+
+## Using Tailwind in Astro Components
+
+Using Tailwind in `.astro` files works exactly as you would expect. Apply utility classes directly to your HTML elements:
+
+```astro
+---
+// src/components/Card.astro
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<div class="rounded-lg border border-gray-700 bg-gray-900 p-6 shadow-lg
+            hover:border-indigo-500 transition-colors duration-200">
+  <h2 class="text-xl font-bold text-white mb-2">{title}</h2>
+  <p class="text-gray-400 text-sm leading-relaxed">{description}</p>
+</div>
+```
+
+That is it. No `className`, no special imports, no template literal syntax. Just `class` and utility strings.
+
+<Callout type="info" title="class, not className">
+  Remember: Astro uses the standard HTML `class` attribute. If you catch yourself typing `className` out of React muscle memory, just switch it to `class`. Your editor will likely remind you too.
+</Callout>
+
+### Tailwind in React Components (Islands)
+
+When you use React components as interactive islands in Astro, you still write `className` in the `.tsx` files -- that is React's API, and it does not change. Tailwind will scan those files too, as long as they match the `content` glob in your Tailwind config.
+
+```tsx
+// src/components/interactive/LikeButton.tsx
+import { useState } from 'react';
+
+export default function LikeButton() {
+  const [liked, setLiked] = useState(false);
+
+  return (
+    <button
+      onClick={() => setLiked(!liked)}
+      className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium
+                  transition-colors duration-150
+                  ${liked
+                    ? 'bg-pink-500/20 text-pink-400 border border-pink-500/50'
+                    : 'bg-gray-800 text-gray-300 border border-gray-600 hover:border-gray-400'
+                  }`}
+    >
+      {liked ? 'Liked' : 'Like'}
+    </button>
+  );
+}
+```
+
+## Combining Tailwind with `class:list`
+
+Astro's `class:list` directive pairs perfectly with Tailwind. You can use it to conditionally apply utility classes based on props or state -- just like you would with `clsx` in React, but without any extra library:
+
+```astro
+---
+// src/components/Badge.astro
+interface Props {
+  variant: 'success' | 'warning' | 'error' | 'info';
+  label: string;
+}
+
+const { variant, label } = Astro.props;
+
+const variantClasses: Record<string, string> = {
+  success: 'bg-green-500/15 text-green-400 border-green-500/30',
+  warning: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+  error: 'bg-red-500/15 text-red-400 border-red-500/30',
+  info: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+};
+---
+
+<span
+  class:list={[
+    'inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium',
+    variantClasses[variant],
+  ]}
+>
+  {label}
+</span>
+```
+
+This is a common pattern: keep the shared base classes as a plain string and merge in the variant-specific classes from an object lookup.
+
+<Callout type="tip" title="Coming from React?">
+  In React you would typically write this with `clsx`:
+
+  ```tsx
+  <span className={clsx(
+    'inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium',
+    variantClasses[variant],
+  )}>
+  ```
+
+  The Astro version with `class:list` is essentially the same API, just built in. If you are using a library like `cva` (Class Variance Authority) for more complex variant management, that works in Astro too -- just install it and call it inside the frontmatter.
+</Callout>
+
+Here is a more advanced example showing boolean-based conditional classes:
+
+```astro
+---
+// src/components/NavLink.astro
+interface Props {
+  href: string;
+  isActive?: boolean;
+}
+
+const { href, isActive = false } = Astro.props;
+---
+
+<a
+  href={href}
+  class:list={[
+    'block px-4 py-2 rounded-md text-sm font-medium transition-colors',
+    {
+      'bg-indigo-500/20 text-indigo-300': isActive,
+      'text-gray-400 hover:text-white hover:bg-gray-800': !isActive,
+    },
+  ]}
+>
+  <slot />
+</a>
+```
+
+The object syntax `{ 'class-string': condition }` includes the class string only when the condition is truthy. This is identical to how `clsx` handles objects.
+
+## Tailwind vs Scoped CSS: When to Use Each
+
+Both Tailwind and Astro's scoped styles are zero-runtime approaches, so you are not choosing between performance trade-offs. The choice comes down to **workflow preference and project context**.
+
+### Reach for Tailwind when:
+
+- **You want rapid prototyping.** Utility classes let you style elements without switching between files or naming classes. The feedback loop is tight.
+- **You need design consistency.** Tailwind's spacing scale (`p-4`, `m-6`), color palette, and typography utilities enforce a consistent design system out of the box.
+- **Your team already knows Tailwind.** If your React team is coming to Astro with Tailwind experience, the transition is seamless.
+- **You are building many similar components.** Utilities avoid the mental overhead of inventing unique class names for every element.
+
+### Reach for scoped `<style>` when:
+
+- **You need complex selectors.** Pseudo-elements (`::before`, `::after`), sibling selectors (`+`, `~`), or `:nth-child()` are easier to express in plain CSS than as utility classes.
+- **You want component-level encapsulation.** Scoped styles guarantee no leakage, even if someone adds the same class name in another component.
+- **You are writing complex animations.** Multi-step `@keyframes` animations are far more readable in a `<style>` block than as Tailwind utilities.
+- **You prefer semantic class names.** Some developers find `.pricing-card-header` more readable and maintainable than a long chain of utilities.
+
+### Mixing both
+
+There is no rule that says you must pick one. Many Astro projects use Tailwind for layout and spacing utilities while using scoped `<style>` blocks for complex, component-specific styles:
+
+```astro
+---
+// src/components/AnimatedCard.astro
+---
+
+<div class="rounded-xl border border-gray-700 p-6 card-glow">
+  <h2 class="text-lg font-bold text-white mb-2">
+    <slot name="title" />
+  </h2>
+  <div class="text-gray-400 text-sm">
+    <slot />
+  </div>
+</div>
+
+<style>
+  /* Complex animation -- easier in plain CSS */
+  .card-glow {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card-glow::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0%,
+      #6366f1 25%,
+      transparent 50%
+    );
+    z-index: -1;
+    border-radius: inherit;
+    animation: rotate 4s linear infinite;
+  }
+
+  @keyframes rotate {
+    to { transform: rotate(360deg); }
+  }
+</style>
+```
+
+In this example, Tailwind handles the spacing (`p-6`, `mb-2`), colors (`text-white`, `text-gray-400`), typography (`text-lg`, `font-bold`), and borders -- all the quick, repetitive stuff. The scoped `<style>` block handles the animated conic gradient effect, which would be impractical to express as utility classes.
+
+<Callout type="warning" title="Specificity note">
+  Tailwind utilities and scoped styles can coexist on the same element, but be aware of CSS specificity. Astro's scoped styles use an attribute selector (`[data-astro-cid-xyz]`) which has the same specificity as a class. In most cases they blend seamlessly, but if you see unexpected overrides, check whether a Tailwind `!important` modifier or specificity conflict is at play.
+</Callout>
+
+## Customizing Your Tailwind Config
+
+A quick reminder that your `tailwind.config.mjs` is the central place to extend or override Tailwind's defaults. Here is a common setup for a dark-themed Astro site:
+
+```js
+// tailwind.config.mjs
+export default {
+  content: ['./src/**/*.{astro,html,js,jsx,md,mdx,ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50: '#eef2ff',
+          500: '#6366f1',
+          900: '#312e81',
+        },
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      },
+    },
+  },
+  plugins: [],
+};
+```
+
+You can then use your custom values as utilities: `text-brand-500`, `font-mono`, etc.
+
+## Key Takeaways
+
+- **One command to install:** `npx astro add tailwind` handles everything -- dependencies, config, and base style injection.
+- **Use `class` in `.astro` files**, `className` in React `.tsx` islands. Tailwind scans both.
+- **`class:list` replaces `clsx`** for conditional Tailwind classes. No extra dependency needed.
+- **Tailwind and scoped styles are not mutually exclusive.** Use Tailwind for quick utility-driven styling and scoped `<style>` blocks for complex CSS that is easier to express in plain CSS.
+- **No runtime cost either way.** Both Tailwind and scoped styles are processed at build time, producing optimized static CSS.
+- **Your React Tailwind knowledge transfers directly.** The only differences are `class` vs `className` and `class:list` vs `clsx` -- both trivial adjustments.

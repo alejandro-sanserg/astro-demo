@@ -1,0 +1,156 @@
+---
+/**
+ * Lessons Listing Page
+ * ────────────────────
+ * Displays all lessons organized by chapter. This page demonstrates
+ * grouping content collection entries and rendering them in a structured layout.
+ *
+ * @see Lesson 3.2 (Querying & Rendering Content) for how we fetch and group lessons.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getLessonsByChapter, getLessonSlug, CHAPTERS } from '../../utils/lessons';
+
+const lessonsByChapter = await getLessonsByChapter();
+---
+
+<BaseLayout
+  title="All Lessons | Astro for React Developers"
+  description="Browse all 15 lessons across 5 chapters — from Astro fundamentals to advanced features."
+>
+  <div class="lessons-page">
+    <header class="page-header">
+      <h1>All Lessons</h1>
+      <p>15 lessons across 5 chapters. Work through them in order or jump to a specific topic.</p>
+    </header>
+
+    {[...lessonsByChapter.entries()].map(([chapterNum, lessons]) => (
+      <section class="chapter-section">
+        <div class="chapter-header">
+          <span class="chapter-badge">Chapter {chapterNum}</span>
+          <h2>{CHAPTERS[chapterNum]?.title}</h2>
+          <p>{CHAPTERS[chapterNum]?.description}</p>
+        </div>
+        <div class="lesson-grid">
+          {lessons.map((lesson) => (
+            <a href={`/lessons/${getLessonSlug(lesson)}/`} class="lesson-card">
+              <div class="lesson-card-header">
+                <span class="lesson-number">{chapterNum}.{lesson.data.order}</span>
+                <span class:list={['difficulty-dot', lesson.data.difficulty]} />
+              </div>
+              <h3>{lesson.data.title}</h3>
+              <p>{lesson.data.description}</p>
+              <span class="lesson-duration">{lesson.data.duration}</span>
+            </a>
+          ))}
+        </div>
+      </section>
+    ))}
+  </div>
+</BaseLayout>
+
+<style>
+  .lessons-page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-16);
+  }
+
+  .page-header {
+    margin-bottom: var(--space-12);
+  }
+
+  .page-header p {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-lg);
+  }
+
+  .chapter-section {
+    margin-bottom: var(--space-12);
+  }
+
+  .chapter-header {
+    margin-bottom: var(--space-6);
+  }
+
+  .chapter-badge {
+    display: inline-block;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-accent-light);
+    margin-bottom: var(--space-2);
+  }
+
+  .chapter-header h2 {
+    margin-top: 0;
+    margin-bottom: var(--space-2);
+  }
+
+  .chapter-header p {
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  .lesson-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-4);
+  }
+
+  .lesson-card {
+    display: block;
+    padding: var(--space-4) var(--space-6);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    background: var(--color-bg-secondary);
+  }
+
+  .lesson-card:hover {
+    border-color: var(--color-accent);
+    transform: translateY(-1px);
+    text-decoration: none;
+  }
+
+  .lesson-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-2);
+  }
+
+  .lesson-number {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--color-accent-light);
+    font-weight: 600;
+  }
+
+  .difficulty-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .difficulty-dot.beginner { background: var(--color-success); }
+  .difficulty-dot.intermediate { background: var(--color-warning); }
+  .difficulty-dot.advanced { background: var(--color-danger); }
+
+  .lesson-card h3 {
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+    margin: 0 0 var(--space-2);
+  }
+
+  .lesson-card p {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin: 0 0 var(--space-3);
+    line-height: 1.5;
+  }
+
+  .lesson-duration {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+</style>

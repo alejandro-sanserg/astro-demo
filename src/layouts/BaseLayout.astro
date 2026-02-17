@@ -1,0 +1,67 @@
+---
+/**
+ * BaseLayout
+ * ──────────
+ * The root layout for every page in the course. It provides:
+ * - The HTML document shell (<html>, <head>, <body>)
+ * - Global styles (imported from src/styles/global.css)
+ * - View Transitions via <ClientRouter /> for smooth SPA-like navigation
+ * - The shared Header and Footer
+ *
+ * In Astro, layouts are regular components that wrap page content using <slot />.
+ * This is similar to React's {children} pattern, but <slot /> is a web standard
+ * concept (also used in Web Components and Vue).
+ *
+ * @see Lesson 1.4 (Layouts & Composition) for a deep dive into this pattern.
+ * @see Lesson 5.1 (View Transitions) for how <ClientRouter /> works.
+ */
+import { ClientRouter } from 'astro:transitions';
+import BaseHead from '../components/BaseHead.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead title={title} description={description} />
+    <!--
+      ClientRouter enables View Transitions — smooth animations between pages
+      instead of full-page reloads. This single line gives us SPA-like navigation
+      while keeping the benefits of Astro's MPA architecture.
+    -->
+    <ClientRouter />
+  </head>
+  <body>
+    <Header />
+    <main>
+      <!--
+        <slot /> renders whatever content the parent page passes into this layout.
+        Think of it like {children} in React, but it's the web-standard approach.
+      -->
+      <slot />
+    </main>
+    <Footer />
+
+    <style>
+      /*
+       * Astro scopes <style> blocks to the component automatically.
+       * These styles only apply to elements in THIS file — they won't
+       * leak to child components. No CSS Modules or styled-components needed!
+       *
+       * @see Lesson 2.1 (Scoped Styles) for how this works under the hood.
+       */
+      main {
+        min-height: calc(100vh - var(--header-height) - 4rem);
+      }
+    </style>
+  </body>
+</html>

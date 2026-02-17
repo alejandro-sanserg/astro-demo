@@ -1,0 +1,320 @@
+---
+title: "Scoped Styles & CSS"
+description: "Learn how Astro's built-in scoped styles eliminate CSS conflicts at build time, with zero runtime cost and no libraries required."
+chapter: 2
+order: 1
+difficulty: "intermediate"
+objectives:
+  - "Understand how Astro scopes styles using data attributes"
+  - "Use :global() and is:global to opt out of scoping"
+  - "Pass JavaScript values into CSS with define:vars"
+  - "Apply conditional classes with the class:list directive"
+  - "Import and use external stylesheets"
+  - "Compare Astro scoping to React styling solutions"
+duration: "20 min"
+tags: ["css", "scoped-styles", "class-list", "define-vars", "styling"]
+---
+
+import Callout from '../../../components/Callout.astro';
+import StyleScopeDemo from '../../../components/interactive/StyleScopeDemo.tsx';
+
+# Scoped Styles & CSS
+
+If you have spent any time in the React ecosystem, you have probably wrestled with CSS scoping. Maybe you reached for CSS Modules, styled-components, Emotion, or even inline styles just to keep your component styles from leaking. Astro takes a different approach: **scoped styles are built in, zero-config, and have zero runtime cost**.
+
+In this lesson, you will learn how Astro's `<style>` blocks work, how to escape scoping when you need global styles, how to pass JavaScript values into CSS, and how to conditionally apply classes -- all without installing a single extra dependency.
+
+## How Astro Scopes Styles
+
+Every `<style>` block inside an `.astro` file is **automatically scoped** to that component. Astro achieves this by adding a unique `data-astro-cid-*` attribute to both the HTML elements and the CSS selectors at build time.
+
+```astro
+---
+// src/components/Card.astro
+---
+<div class="card">
+  <h2 class="title">Hello</h2>
+  <p>Some content here.</p>
+</div>
+
+<style>
+  .card {
+    border: 1px solid #ccc;
+    padding: 1rem;
+    border-radius: 8px;
+  }
+
+  .title {
+    color: purple;
+    font-size: 1.5rem;
+  }
+</style>
+```
+
+At build time, Astro transforms this into something like:
+
+```html
+<div class="card" data-astro-cid-abc123>
+  <h2 class="title" data-astro-cid-abc123>Hello</h2>
+  <p data-astro-cid-abc123>Some content here.</p>
+</div>
+
+<style>
+  .card[data-astro-cid-abc123] {
+    border: 1px solid #ccc;
+    padding: 1rem;
+    border-radius: 8px;
+  }
+
+  .title[data-astro-cid-abc123] {
+    color: purple;
+    font-size: 1.5rem;
+  }
+</style>
+```
+
+Notice the `data-astro-cid-abc123` attribute. Every CSS selector is narrowed to only match elements with that attribute. Another component can safely use `.title` with completely different styles, and they will never conflict.
+
+<StyleScopeDemo client:visible />
+
+<Callout type="tip" title="Coming from React?">
+  In React, you might be used to:
+  - **CSS Modules** (`import styles from './Card.module.css'`) -- similar scoping idea, but you reference classes as `styles.card` instead of plain `.card`.
+  - **styled-components / Emotion** -- CSS-in-JS that generates unique class names at *runtime*, adding to your JavaScript bundle size.
+  - **Inline styles** (`style={{ color: 'purple' }}`) -- no cascade, no pseudo-selectors, no media queries.
+
+  Astro's approach is closest to CSS Modules, but with cleaner syntax: you write plain CSS with normal class names. Scoping happens at build time, so there is **no runtime JavaScript** and **no extra imports**.
+</Callout>
+
+## Going Global: `:global()` and `is:global`
+
+Sometimes you genuinely need styles that reach outside the current component -- for example, styling rendered Markdown content, overriding a third-party widget, or applying base typography rules.
+
+### The `:global()` selector
+
+Wrap any selector (or part of a selector) in `:global()` to exempt it from scoping:
+
+```astro
+<style>
+  /* Only this rule is global; the rest remain scoped */
+  :global(body) {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* Scoped parent, global child: the .prose must be in THIS component,
+     but the h2 inside it can come from anywhere (e.g., rendered Markdown) */
+  .prose :global(h2) {
+    color: var(--color-heading);
+    margin-top: 2rem;
+  }
+
+  /* This is still scoped normally */
+  .card {
+    padding: 1rem;
+  }
+</style>
+```
+
+### The `is:global` attribute
+
+If you want the *entire* style block to be global, use the `is:global` attribute instead of wrapping every selector:
+
+```astro
+<style is:global>
+  /* Everything in this block is global -- no scoping at all */
+  h1 {
+    font-size: 2.5rem;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+</style>
+```
+
+<Callout type="warning" title="Use global styles sparingly">
+  Global styles defeat the purpose of component scoping. Prefer scoped styles for component-level design, and reserve `is:global` for true application-wide concerns like resets, typography baselines, or third-party overrides.
+</Callout>
+
+## Passing JavaScript to CSS with `define:vars`
+
+One of Astro's most elegant features is `define:vars`, which lets you pass values from the component's frontmatter (or script) into CSS as custom properties -- no `style` attribute hacking required.
+
+```astro
+---
+// src/components/ProgressBar.astro
+interface Props {
+  percent: number;
+  color?: string;
+}
+
+const { percent, color = '#3b82f6' } = Astro.props;
+---
+
+<div class="progress-track">
+  <div class="progress-fill"></div>
+</div>
+
+<style define:vars={{ percent: `${percent}%`, color }}>
+  .progress-track {
+    background: #1e293b;
+    border-radius: 9999px;
+    height: 8px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    background: var(--color);
+    width: var(--percent);
+    height: 100%;
+    transition: width 0.3s ease;
+  }
+</style>
+```
+
+Behind the scenes, Astro injects inline `style` custom properties on the component's root element:
+
+```html
+<div class="progress-track" style="--percent: 75%; --color: #3b82f6;" data-astro-cid-xyz>
+```
+
+Your CSS then reads those values via `var(--color)` and `var(--percent)`.
+
+<Callout type="tip" title="Coming from React?">
+  In React you might pass dynamic values through inline `style` objects or a CSS-in-JS template literal. With `define:vars`, you keep your CSS in a proper `<style>` block (with full IDE support, syntax highlighting, and autocompletion) while still making it dynamic. The values are set via CSS custom properties, not JavaScript string interpolation.
+</Callout>
+
+## Conditional Classes with `class:list`
+
+Astro provides a built-in `class:list` directive that works like the popular `clsx` or `classnames` libraries in React. It accepts an array of values -- strings, objects, arrays, or falsy values -- and merges them into a single class string.
+
+```astro
+---
+// src/components/Button.astro
+interface Props {
+  variant?: 'primary' | 'secondary' | 'danger';
+  size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
+  class?: string;
+}
+
+const { variant = 'primary', size = 'md', disabled = false, class: className } = Astro.props;
+---
+
+<button
+  class:list={[
+    'btn',
+    `btn-${variant}`,
+    `btn-${size}`,
+    { 'btn-disabled': disabled },
+    className,
+  ]}
+  disabled={disabled}
+>
+  <slot />
+</button>
+
+<style>
+  .btn {
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .btn-primary { background: #6366f1; color: white; }
+  .btn-secondary { background: #374151; color: white; }
+  .btn-danger { background: #ef4444; color: white; }
+
+  .btn-sm { padding: 4px 12px; font-size: 0.85rem; }
+  .btn-md { padding: 8px 20px; font-size: 1rem; }
+  .btn-lg { padding: 12px 28px; font-size: 1.15rem; }
+
+  .btn-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
+```
+
+Here is a comparison with the React equivalent:
+
+```tsx
+// React -- requires installing clsx or classnames
+import clsx from 'clsx';
+
+function Button({ variant = 'primary', size = 'md', disabled, className }) {
+  return (
+    <button
+      className={clsx(
+        'btn',
+        `btn-${variant}`,
+        `btn-${size}`,
+        { 'btn-disabled': disabled },
+        className,
+      )}
+      disabled={disabled}
+    />
+  );
+}
+```
+
+The API is nearly identical, but `class:list` is built in -- no extra dependency.
+
+<Callout type="info" title="class vs className">
+  Astro uses the standard HTML attribute name `class`, not React's `className`. The `class:list` directive is Astro-specific syntactic sugar that compiles away at build time.
+</Callout>
+
+## Importing External Stylesheets
+
+You can import `.css` files directly in your component frontmatter. Astro will bundle and optimize them automatically:
+
+```astro
+---
+// src/layouts/BaseLayout.astro
+import '../styles/reset.css';
+import '../styles/global.css';
+---
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
+```
+
+You can also import CSS from npm packages:
+
+```astro
+---
+import 'open-props/style';
+import 'open-props/normalize';
+---
+```
+
+These imported styles are **global** by default (they are not scoped to the importing component). Astro deduplicates them so the same file is never included twice, even if multiple components import it.
+
+## Scoping vs Other Approaches: A Quick Reference
+
+| Approach | Scoping | Runtime cost | Pseudo-selectors / media queries | Dynamic values |
+|---|---|---|---|---|
+| **Astro `<style>`** | Build-time data attributes | None | Full CSS support | `define:vars` |
+| **CSS Modules** | Build-time unique classnames | None | Full CSS support | CSS variables (manual) |
+| **styled-components** | Runtime unique classnames | JS runtime | Full CSS support | Template literals |
+| **Emotion** | Runtime unique classnames | JS runtime | Full CSS support | Template literals |
+| **Tailwind CSS** | Utility classes (no conflicts) | None | Via utilities | Arbitrary values |
+| **Inline styles** | Element-level | None | None | Direct JS values |
+
+## Key Takeaways
+
+- **Every `<style>` block in `.astro` files is scoped by default.** Astro adds `data-astro-cid-*` attributes at build time.
+- **Use `:global()` or `is:global`** when you need styles that reach outside the component boundary.
+- **`define:vars` bridges JavaScript and CSS** by injecting values as CSS custom properties -- keeping your CSS in a real `<style>` block.
+- **`class:list` is built-in `clsx`** -- no extra package needed for conditional classes.
+- **Imported CSS files are global and deduplicated.** Use them for resets, base styles, and third-party CSS.
+- **There is no runtime cost.** Unlike CSS-in-JS libraries, all of Astro's style processing happens at build time. Your users download plain CSS.

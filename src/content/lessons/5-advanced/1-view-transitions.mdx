@@ -1,0 +1,287 @@
+---
+title: View Transitions
+description: Add smooth, SPA-like page transitions to your Astro site with the built-in View Transitions API -- no extra libraries needed.
+chapter: 5
+order: 1
+difficulty: advanced
+objectives:
+  - Understand what View Transitions are and how they differ from SPA routing
+  - Enable View Transitions site-wide with a single component
+  - Use built-in animations like fade and slide
+  - Morph elements across pages with transition:name
+  - Persist state across navigations with transition:persist
+  - Hook into lifecycle events for custom transition logic
+  - Understand how prefetching accelerates navigation
+duration: "15 min"
+tags:
+  - view-transitions
+  - navigation
+  - animations
+  - performance
+  - client-router
+---
+
+import Callout from '../../../components/Callout.astro';
+
+## What Are View Transitions?
+
+View Transitions are a browser-native API that allows you to animate between two DOM states -- in Astro's case, between two full page navigations. Instead of the hard flash you get when the browser loads a new HTML page, View Transitions smoothly crossfade the old page out and the new page in. The result feels like a single-page application, but you are still serving fully rendered HTML pages.
+
+This is a big deal for the MPA architecture that Astro uses. Historically, the main UX advantage SPAs had over traditional multi-page sites was smooth navigation. Users would click a link in a React app and see a seamless transition, while clicking a link on a regular HTML site caused a jarring white flash as the browser tore down the old page and painted the new one. View Transitions eliminate that gap entirely.
+
+<Callout type="info" title="Browser support">
+  The View Transitions API is natively supported in Chromium browsers (Chrome, Edge, Opera, Arc) and Safari 18+. For Firefox and older browsers, Astro automatically falls back to a standard page load -- no broken experience, just no animation. Your site works everywhere; it simply looks *fancier* in supporting browsers.
+</Callout>
+
+## Enabling View Transitions with ClientRouter
+
+In React, achieving smooth page transitions requires a combination of React Router (or Next.js router), an animation library like Framer Motion or React Transition Group, and careful coordination of enter/exit animations, route matching, and layout persistence. It is dozens of lines of configuration and often hundreds of lines of animation code.
+
+In Astro, it is one line.
+
+Open this project's `BaseLayout.astro` and you will see exactly how it works:
+
+```astro
+---
+// src/layouts/BaseLayout.astro
+import { ClientRouter } from 'astro:transitions';
+import BaseHead from '../components/BaseHead.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<html lang="en">
+  <head>
+    <BaseHead title={title} description={description} />
+    <ClientRouter />
+  </head>
+  <body>
+    <Header />
+    <main>
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>
+```
+
+The `<ClientRouter />` component in the `<head>` is all it takes. Once it is present in a layout, every page that uses that layout gets smooth transitions automatically. Since `BaseLayout.astro` wraps every page in this project, the entire site has View Transitions enabled.
+
+When you click a link, here is what actually happens under the hood:
+
+1. Astro intercepts the click event before the browser navigates.
+2. It fetches the new page's HTML in the background.
+3. It uses the View Transitions API to smoothly crossfade from the old page to the new one.
+4. The browser's URL, title, and scroll position are updated.
+5. The old page's DOM is replaced with the new page's DOM.
+
+The result is indistinguishable from SPA navigation to the end user, but you get all the benefits of Astro's MPA architecture: full HTML pages, no client-side routing state, no hydration waterfall.
+
+<Callout type="tip" title="Coming from React Router?">
+  Unlike React Router, there is no route configuration file, no `<Routes>` component, no `<Link>` component to import. Standard HTML `<a>` tags work automatically. Astro intercepts them at the layout level. You write normal HTML links and get SPA-quality navigation for free.
+</Callout>
+
+## Built-In Animations
+
+Astro ships with two built-in animation presets that you can apply to any element.
+
+### Fade (The Default)
+
+When View Transitions are enabled, every page change uses a **fade** animation by default. The old page fades out, the new page fades in. This happens automatically with no additional configuration -- the moment you add `<ClientRouter />`, fades are active.
+
+You can explicitly apply the fade animation to specific elements if you want to be clear about your intent:
+
+```astro
+---
+import { fade } from 'astro:transitions';
+---
+
+<div transition:animate={fade({ duration: '0.3s' })}>
+  This element will fade during transitions.
+</div>
+```
+
+### Slide
+
+The **slide** animation moves elements in from the side, which feels natural for forward/backward navigation. Old content slides out to the left; new content slides in from the right. Navigating back reverses the direction.
+
+```astro
+---
+import { slide } from 'astro:transitions';
+---
+
+<main transition:animate={slide({ duration: '0.4s' })}>
+  This content will slide in and out during page changes.
+</main>
+```
+
+You can also use the string shorthand directly in the template:
+
+```astro
+<main transition:animate="slide">
+  Slides with default timing.
+</main>
+```
+
+## Morphing Elements with transition:name
+
+Here is where View Transitions get truly powerful. The `transition:name` directive lets you tell the browser that an element on the old page and an element on the new page are the *same thing*. Instead of fading one out and the other in, the browser will **morph** the first element into the second -- smoothly animating its position, size, and appearance.
+
+This is the same concept as the `layoutId` prop in Framer Motion's `AnimatePresence`, but built into the platform.
+
+```astro
+<!-- On the blog listing page -->
+<h2 transition:name={`post-title-${post.slug}`}>
+  {post.title}
+</h2>
+
+<!-- On the individual blog post page -->
+<h1 transition:name={`post-title-${post.slug}`}>
+  {post.title}
+</h1>
+```
+
+When a user clicks from the listing to the post, the title smoothly animates from its position and size on the listing page to its new position and size on the post page. The text morphs, the font size transitions, and the element glides into place. No JavaScript animation library required.
+
+The key rule: **`transition:name` values must be unique on each page.** You cannot have two elements with the same transition name on a single page. Across pages, matching names create the morphing connection.
+
+Common uses for `transition:name`:
+
+- **Titles** that appear in a list and on a detail page
+- **Thumbnails** that expand into full-size images
+- **Navigation items** that highlight the current page
+- **Cards** that expand into full content views
+
+## Persisting State with transition:persist
+
+By default, when Astro performs a View Transition, the entire DOM is replaced. This means any client-side state -- open dropdowns, scroll positions within components, playing media, form input values -- resets on every navigation.
+
+The `transition:persist` directive solves this. It tells Astro to keep an element (and its state) across page navigations instead of destroying and recreating it.
+
+```astro
+<!-- This audio player will keep playing across page changes -->
+<audio transition:persist id="bg-music" controls>
+  <source src="/ambient.mp3" type="audio/mpeg" />
+</audio>
+```
+
+This is especially useful for:
+
+- **Media players** that should keep playing as the user navigates
+- **Sidebars** with expanded/collapsed state you want to preserve
+- **Interactive islands** (React components) that maintain their internal state
+- **Chat widgets** that stay open during navigation
+
+For React components used as Astro islands, `transition:persist` keeps the component mounted and preserves its `useState` values, `useRef` values, and any side effects:
+
+```astro
+<!-- The React counter keeps its count across navigations -->
+<Counter client:load transition:persist />
+```
+
+<Callout type="warning" title="Persist requires matching elements">
+  For `transition:persist` to work, the element must exist on both the old and new page, and it must have the same `id` or `transition:persist` value. If the element does not exist on the destination page, it will simply be removed as usual.
+</Callout>
+
+## Lifecycle Events
+
+Astro fires several custom events during the View Transition lifecycle, giving you fine-grained control over the process. These events are dispatched on the `document` object.
+
+### astro:before-preparation
+
+Fires when a navigation is triggered but before the new page is fetched. Use this to show a loading indicator or cancel the navigation.
+
+```astro
+<script>
+  document.addEventListener('astro:before-preparation', (event) => {
+    // Access the destination URL
+    console.log('Navigating to:', event.to);
+
+    // You can show a loading spinner here
+    document.querySelector('#loader')?.classList.add('visible');
+  });
+</script>
+```
+
+### astro:before-swap
+
+Fires after the new page is loaded but before the DOM is swapped. This is the place to customize what gets swapped and how.
+
+```astro
+<script>
+  document.addEventListener('astro:before-swap', (event) => {
+    // Preserve a specific element from the old page
+    const darkMode = document.querySelector('#theme-toggle');
+    if (darkMode) {
+      event.newDocument.querySelector('#theme-toggle')?.replaceWith(darkMode);
+    }
+  });
+</script>
+```
+
+### astro:after-swap
+
+Fires immediately after the new DOM has been swapped in. The URL has already changed, but the transition animation may still be in progress. Good for reinitializing third-party scripts.
+
+### astro:page-load
+
+Fires when the page is fully loaded and the transition animation is complete. This fires on both initial page load and subsequent navigations, making it a reliable replacement for `DOMContentLoaded` in a View Transitions context.
+
+```astro
+<script>
+  document.addEventListener('astro:page-load', () => {
+    // Re-initialize analytics, third-party widgets, etc.
+    // This runs on every navigation, not just the first page load.
+    initializeAnalytics();
+  });
+</script>
+```
+
+<Callout type="tip" title="React developer parallel">
+  These lifecycle events are conceptually similar to React Router's `useNavigationState` and `useBeforeUnload` hooks, or Next.js Router events like `routeChangeStart` and `routeChangeComplete`. The difference is that they are standard DOM events, not framework-specific hooks, so they work with any code -- vanilla JS, React islands, or third-party scripts.
+</Callout>
+
+## Prefetching
+
+Astro automatically prefetches linked pages to make navigations feel instant. When View Transitions are enabled via `<ClientRouter />`, Astro will prefetch the HTML of linked pages **on hover** by default. This means by the time the user finishes their click, the destination page is often already downloaded and ready to swap in.
+
+You can control prefetching behavior at the link level:
+
+```astro
+<!-- Prefetch on hover (default behavior) -->
+<a href="/about">About</a>
+
+<!-- Prefetch as soon as the link is visible in the viewport -->
+<a href="/popular-page" data-astro-prefetch="viewport">Popular</a>
+
+<!-- Prefetch immediately when the page loads -->
+<a href="/likely-next" data-astro-prefetch="load">Next Lesson</a>
+
+<!-- Disable prefetching for this link -->
+<a href="/rarely-visited" data-astro-prefetch="false">Archive</a>
+```
+
+You can also configure the default prefetch strategy site-wide in `astro.config.mjs`:
+
+```javascript
+export default defineConfig({
+  prefetch: {
+    defaultStrategy: 'hover',    // 'hover' | 'viewport' | 'load'
+    prefetchAll: false,           // true prefetches every link on the page
+  },
+});
+```
+
+The combination of View Transitions and prefetching means that navigating an Astro site often *feels faster than a SPA*, because the next page starts loading before the user even clicks. In a React SPA, the component still needs to mount, fetch data, and render after the route change. In Astro, the fully rendered HTML is already in memory, waiting to be swapped in.
+
+## Summary
+
+View Transitions transform Astro from a traditional multi-page site into something that feels like a polished single-page application -- without sacrificing any of the performance or simplicity benefits of the MPA architecture. One component in your layout gives you smooth animations, element morphing, state persistence, and intelligent prefetching. In React, achieving the same result would require React Router, Framer Motion, a prefetching strategy, and hundreds of lines of coordination code. In Astro, it is `<ClientRouter />`.

@@ -1,0 +1,198 @@
+---
+title: Welcome to Astro
+description: Discover what Astro is, why it exists, and how its "HTML-first" philosophy differs from the React mental model you already know.
+chapter: 1
+order: 1
+difficulty: beginner
+objectives:
+  - Understand what Astro is and the problem it solves
+  - Grasp the MPA vs SPA mental model shift
+  - Learn why zero JavaScript by default matters for performance
+  - Know when to choose Astro over Next.js or plain React
+duration: "12 min"
+tags:
+  - astro
+  - introduction
+  - architecture
+  - performance
+---
+
+import Callout from '../../../components/Callout.astro';
+
+## What Is Astro?
+
+Astro is a web framework for building **content-focused websites** -- blogs, documentation sites, marketing pages, portfolios, e-commerce storefronts, and courses like this one. It shipped its 1.0 in August 2022 and has since become one of the fastest-growing frameworks in the JavaScript ecosystem.
+
+But here is the thing that will feel strange at first: **Astro is not trying to replace React.** It is not a competitor to React the way Svelte or Vue might be. Instead, Astro sits at a different layer. It is a *site framework* that can *use* React (and Svelte, Vue, Solid, or Preact) as its component language when interactivity is needed.
+
+Think of it this way:
+
+- **React** is a UI library for building interactive interfaces.
+- **Next.js** is a React framework for building full-stack applications.
+- **Astro** is a web framework for building content-rich websites that happen to use React (or any UI library) only where JavaScript is truly needed.
+
+This distinction matters. Astro is purpose-built for a category of websites where the majority of content is static -- where most of what the user sees is text, images, and navigation that does not require a 200KB JavaScript runtime to render a paragraph.
+
+## The MPA vs SPA Mental Model Shift
+
+As a React developer, you have spent your career in the **Single Page Application** world. The SPA mental model works like this:
+
+1. The browser downloads a JavaScript bundle.
+2. React takes over the entire page and renders everything client-side.
+3. Navigation happens by swapping components in and out -- the page never fully reloads.
+4. Every piece of UI, from the header to the footer, lives inside React's component tree.
+
+Astro uses the **Multi-Page Application** model, which is fundamentally different:
+
+1. The server (or build process) renders each page to **complete HTML**.
+2. The browser receives ready-to-display HTML -- no JavaScript required to see content.
+3. Navigation triggers a new page load (though Astro's View Transitions make this feel instant).
+4. JavaScript is only loaded for components that explicitly need interactivity.
+
+```
+SPA (React/Next.js):              MPA (Astro):
+┌──────────────────────┐          ┌──────────────────────┐
+│  <div id="root">     │          │  <html>              │
+│    (empty until JS    │          │    <h1>Hello!</h1>   │  ← Ready immediately
+│     downloads and     │          │    <p>Content here</p│
+│     executes)         │          │    <div id="counter"> │  ← Only this needs JS
+│  </div>               │          │      <Counter />      │
+│                       │          │    </div>             │
+│  <script src="app.js" │          │  </html>             │
+│    300KB+ />          │          │  <script src="counter │
+└──────────────────────┘          │    .js" 8KB />        │
+                                  └──────────────────────┘
+```
+
+<Callout type="tip" title="Coming from React?">
+  The biggest mental shift is this: in React, everything is JavaScript that *produces* HTML. In Astro, everything is HTML that *occasionally uses* JavaScript. You are writing HTML-first, not JS-first. This feels backwards at first, but it clicks quickly -- especially when you see your Lighthouse scores.
+</Callout>
+
+## Zero JavaScript by Default
+
+This is Astro's headline feature, and it is not just a slogan. When you build an Astro site, the output is **pure HTML and CSS** unless you explicitly opt in to client-side JavaScript.
+
+Here is what that means in practice:
+
+```astro
+---
+// This code runs at BUILD TIME, not in the browser.
+// It is stripped from the final output completely.
+const response = await fetch('https://api.example.com/posts');
+const posts = await response.json();
+---
+
+<h1>Blog Posts</h1>
+<ul>
+  {posts.map(post => (
+    <li>
+      <a href={`/posts/${post.slug}`}>{post.title}</a>
+    </li>
+  ))}
+</ul>
+
+<!-- The browser receives ONLY the rendered HTML. No fetch(), no JSON, no runtime. -->
+```
+
+Compare this to a typical React component doing the same thing:
+
+```jsx
+// This runs in the browser. The user waits for:
+// 1. React to load (~40KB)
+// 2. This component to mount
+// 3. The fetch() to complete
+// 4. React to re-render with the data
+function BlogPosts() {
+  const [posts, setPosts] = useState([]);
+
+  useEffect(() => {
+    fetch('https://api.example.com/posts')
+      .then(res => res.json())
+      .then(setPosts);
+  }, []);
+
+  return (
+    <ul>
+      {posts.map(post => (
+        <li key={post.id}>
+          <a href={`/posts/${post.slug}`}>{post.title}</a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+Same result. Wildly different performance characteristics. The Astro version loads instantly because the HTML is already there. The React version requires downloading, parsing, and executing JavaScript before the user sees anything.
+
+<Callout type="info" title="But what about interactivity?">
+  You are probably thinking: "Great, but my site *needs* JavaScript for dropdowns, modals, and forms." Astro handles this with **Islands Architecture**, which we cover in Chapter 4. The short version: you can use React components inside Astro pages and tell Astro exactly *when* to load their JavaScript. The rest of the page stays as pure HTML.
+</Callout>
+
+## When to Use Astro (and When Not To)
+
+Astro is an excellent choice when your site is **content-heavy and read-mostly**:
+
+- Blogs and personal websites
+- Documentation sites
+- Marketing and landing pages
+- Portfolios and agency sites
+- E-commerce product catalogs
+- Online courses and educational platforms
+- News sites and magazines
+
+Astro is probably **not** the right choice when:
+
+- You are building a highly interactive web *application* (think Figma, Notion, Google Docs)
+- Your entire UI is stateful and needs real-time updates
+- You need every page to behave like a single-page app with complex client-side routing
+- You are building a dashboard with dozens of interactive widgets on every page
+
+The rule of thumb: if more than 50% of your page is interactive UI that requires JavaScript, a traditional SPA framework (React + Next.js, or even plain React with Vite) is likely a better fit. If most of your page is content that users *read*, Astro will deliver a faster experience with less complexity.
+
+<Callout type="warning" title="A common misconception">
+  Astro is not "anti-JavaScript." It is anti-*unnecessary* JavaScript. You can still use React, TypeScript, and any npm package you want. The difference is that Astro makes you be intentional about what ships to the browser instead of shipping everything by default.
+</Callout>
+
+## The Performance Payoff
+
+The zero-JS-by-default approach is not just a philosophical choice. It has measurable consequences:
+
+| Metric | Typical SPA | Typical Astro Site |
+|--------|------------|-------------------|
+| Time to First Byte (TTFB) | 200-800ms | 50-200ms |
+| First Contentful Paint (FCP) | 1.5-3.5s | 0.5-1.5s |
+| Total Blocking Time (TBT) | 200-1500ms | 0-50ms |
+| JavaScript Shipped | 150-500KB | 0-50KB |
+
+These are rough ranges, but they illustrate the pattern. When you do not ship a JavaScript runtime, a virtual DOM diffing algorithm, and a hydration step, pages load faster. It is not magic -- it is subtraction.
+
+Google's Core Web Vitals directly reward this approach. Sites built with Astro consistently score 90-100 on Lighthouse without any performance tuning, because the framework's defaults align with what the metrics measure.
+
+## How Astro Builds Your Site
+
+When you run `astro build`, here is what happens:
+
+1. **Astro reads every `.astro` file** in `src/pages/` and determines the routes.
+2. **Component frontmatter executes** -- all your data fetching, computations, and imports run at build time in Node.js.
+3. **Templates render to HTML** -- your JSX-like template syntax produces static HTML strings.
+4. **CSS is extracted and optimized** -- scoped styles are processed, unused CSS is removed.
+5. **Interactive islands are bundled** -- only React (or other framework) components with a `client:*` directive get their JavaScript included.
+6. **Output is static files** -- HTML, CSS, JS, and assets ready to deploy to any static host.
+
+The result is a `dist/` folder full of `.html` files that any web server or CDN can serve. No Node.js server required (unless you opt into SSR, which we cover later).
+
+## What You Will Build in This Course
+
+Throughout this course, you are literally looking at the project you are building. This course website is an Astro application that uses:
+
+- **Astro components** for the layout, navigation, and static UI
+- **React components** for interactive elements like the code comparison widgets and file tree explorer
+- **MDX** for lesson content (what you are reading right now)
+- **Content Collections** for type-safe lesson management
+- **View Transitions** for smooth page navigation
+- **Scoped styles** for component-level CSS
+
+By the end, you will understand every line of code that makes this site work. More importantly, you will know *when* and *why* to reach for Astro instead of -- or alongside -- React.
+
+Let's start by looking at how an Astro project is organized.
